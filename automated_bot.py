@@ -6,6 +6,7 @@ from datetime import datetime
 from src.core.arbitrage_detector import ArbitrageDetector
 from src.strategies.atomic_arbitrage import AtomicArbitrageScanner
 from src.core.atomic_executor import AtomicExecutor
+from src.exchanges.polymarket_clob import PolymarketOrderExecutor
 from src.wallet.wallet_manager import WalletManager
 from src.utils.telegram_bot import TelegramBot
 from dotenv import load_dotenv
@@ -33,11 +34,13 @@ class AutomatedArbitrageBot:
         
         # Initialize Execution (if enabled)
         self.executor = None
+        self.clob_executor = None
         if self.enable_atomic_execution:
             try:
                 self.wallet_manager = WalletManager()
                 self.executor = AtomicExecutor(self.wallet_manager)
-                print("✅ Atomic Execution ENABLED")
+                self.clob_executor = PolymarketOrderExecutor()
+                print("✅ Atomic Execution ENABLED (CTF + CLOB)")
             except Exception as e:
                 print(f"❌ Failed to init execution: {e}")
                 self.enable_atomic_execution = False
@@ -84,28 +87,52 @@ class AutomatedArbitrageBot:
             
     async def execute_atomic_opportunity(self, opp):
         """Execute atomic mint/merge transaction"""
-        if not self.executor: return
+        if not self.executor or not self.clob_executor: return
         
         tx_hash = None
-        if opp.direction == "BUY_MERGE":
-            # Need to buy YES+NO first?? Currently scanner assumes we buy ON CLOB.
-            # Strategy A in PDF says: "Comprar YES y NO... luego fusionar"
-            # Wait, the executor does Mint (Split USDC -> YES+NO) and Merge (YES+NO -> USDC).
-            # If market sum < 1.0 (BUY_MERGE), we buy cheap tokens and merge them for $1.
-            #   -> Requires CLOB BUY orders first.
-            # If market sum > 1.0 (SPLIT_SELL), we split $1 USDC -> YES+NO and sell expensive tokens.
-            #   -> Requires CTF Split first, then CLOB SELL orders.
+        
+        # Strategy: SPLIT & SELL (Arb > 1.0)
+        if opp.direction == "SPLIT_SELL":
+            print(f"⚡ Executing SPLIT_SELL on {opp.market_title[:30]}...")
             
-            # For now, implementing SPLIT_SELL flow as it starts with USDC
-            if opp.direction == "SPLIT_SELL":
-                # 1. Split USDC
-                tx_hash = await self.executor.execute_split(opp.condition_id, self.max_position_size)
-                # 2. Sell on CLOB (TODO: Implement CLOB execution)
-                if tx_hash and self.telegram:
-                     await self.telegram.send_message(f"✅ Executed SPLIT: {tx_hash}")
-            else:
-                # BUY_MERGE requires buying first, too complex for atomic executor alone right now
-                pass
+            # 1. Execute Split (On-Chain)
+            tx_hash = await self.executor.execute_split(opp.condition_id, self.max_position_size)
+            
+            if tx_hash:
+                if self.telegram:
+                     await self.telegram.send_message(f"✅ One-Chain Split Confirmed: {tx_hash}\nSelling tokens...")
+                
+                # 2. Sell Tokens (CLOB)
+                shares = self.max_position_size
+                
+                print(f"   Selling {shares} YES @ {opp.yes_price}...")
+                order_yes = self.clob_executor.place_order(
+                    token_id=opp.yes_token_id,
+                    side="SELL",
+                    price=opp.yes_price,
+                    size=shares
+                )
+                
+                print(f"   Selling {shares} NO @ {opp.no_price}...")
+                order_no = self.clob_executor.place_order(
+                    token_id=opp.no_token_id,
+                    side="SELL",
+                    price=opp.no_price,
+                    size=shares
+                )
+                
+                if order_yes and order_no:
+                    msg = f"💰 PROFIT SECURED!\nSold YES: {order_yes}\nSold NO: {order_no}"
+                    print(msg)
+                    if self.telegram: await self.telegram.send_message(msg)
+                else:
+                    err = f"⚠️ Sell Orders Incomplete. YES:{order_yes} NO:{order_no}. Check manual."
+                    print(err)
+                    if self.telegram: await self.telegram.send_message(err)
+
+        elif opp.direction == "BUY_MERGE":
+             # Strategy: BUY & MERGE (Not implemented yet)
+             pass
         
     async def run_scan_cycle(self):
         """Run one scan cycle"""
