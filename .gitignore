@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.live
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and databases
+*.log
+*.db
+logs/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# Deployment
+deployment_package.zip
+
+# OS
+.DS_Store
+Thumbs.db
