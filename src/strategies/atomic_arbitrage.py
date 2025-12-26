@@ -95,8 +95,15 @@ class AtomicArbitrageScanner:
                 async with session.get(url, timeout=5) as response:
                     if response.status == 200:
                         return await response.json()
-            except:
+                    elif response.status == 429:
+                         print(f"[WARN] rate limit on book fetch!")
+                    else:
+                         # print(f"[DEBUG] Book fetch failed: {response.status}")
+                         pass
+            except Exception as e:
+                # print(f"[ERR] Book fetch exc: {e}")
                 return None
+            return None
         
         # Fetch both concurrently
         yes_book, no_book = await asyncio.gather(
@@ -157,6 +164,11 @@ class AtomicArbitrageScanner:
             
             async def process_market(market, event):
                 async with sem:
+                    # Filter by Liquidity
+                    liquidity = market.get("liquidityNum", 0)
+                    if liquidity < 100: 
+                        return
+                    
                     # Get token IDs
                     token_ids_raw = market.get("clobTokenIds", None)
                     if not token_ids_raw: return
@@ -206,7 +218,7 @@ class AtomicArbitrageScanner:
                 for market in markets:
                     tasks.append(process_market(market, event))
             
-            print(f"Processing {len(tasks)} markets concurrently...")
+            print(f"Processing {len(tasks)} markets concurrently (liquidity > 100)...")
             await asyncio.gather(*tasks)
     
     def log_opportunity(self, market, event, direction, p1, p2, sum_price, profit_pct, t1, t2):
