@@ -168,8 +168,33 @@ class AutomatedArbitrageBot:
                     if self.telegram: await self.telegram.send_message(err)
 
         elif opp.direction == "BUY_MERGE":
-             # Strategy: BUY & MERGE (Not implemented yet)
-             pass
+             print(f"⚡ Executing BUY_MERGE on {opp.market_title[:30]}...")
+             shares = self.max_position_size
+             
+             # 1. Buy YES
+             print(f"   Buying {shares} YES @ {opp.yes_price}...")
+             oid_yes = self.clob_executor.place_order(opp.yes_token_id, "BUY", opp.yes_price, shares)
+             
+             # 2. Buy NO
+             print(f"   Buying {shares} NO @ {opp.no_price}...")
+             oid_no = self.clob_executor.place_order(opp.no_token_id, "BUY", opp.no_price, shares)
+             
+             if oid_yes and oid_no:
+                 print("   ✅ Buy Orders Placed. Waiting for fills (5s)...")
+                 await asyncio.sleep(5) # Wait for settlement/fills
+                 
+                 # 3. Merge (Redeem)
+                 # Ideally we check balances first. For now, try merging.
+                 tx_hash = await self.executor.execute_merge(opp.condition_id, shares)
+                 
+                 if tx_hash:
+                     msg = f"💰 CYCLE COMPLETE: Bought & Merged! TX: {tx_hash}"
+                     print(msg)
+                     if self.telegram: await self.telegram.send_message(msg)
+                 else:
+                     print("❌ Merge Failed (Check balances)")
+             else:
+                 print("⚠️ Buy Orders Failed")
     
     async def get_active_token_id(self):
         """Fetch one active token ID from Gamma API"""
