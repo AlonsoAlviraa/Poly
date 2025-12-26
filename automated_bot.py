@@ -1,3 +1,4 @@
+
 import asyncio
 import os
 import sys
@@ -79,8 +80,74 @@ class AutomatedArbitrageBot:
         else:
             print("   Telegram: Disabled (Check .env)")
 
-    # ... notify_opportunity ... (Same as before)
-    # ... execute_atomic_opportunity ... (Same as before)
+    async def notify_opportunity(self, opportunity: Dict) -> bool:
+        """
+        Notify about arbitrage opportunity (Signal Only).
+        """
+        try:
+            print(f"\n🔔 SIGNAL DETECTED!")
+            print(f"   Event: {opportunity['poly_event']['title'][:60]}")
+            print(f"   Profit: {opportunity['profit_percent']:.2f}%")
+            
+            # Send Telegram notification
+            if self.telegram:
+                await self.telegram.send_arb_alert(opportunity, self.max_position_size)
+            
+            self.total_signals += 1
+            return True
+            
+        except Exception as e:
+            print(f"   ❌ Signal failed: {e}")
+            return False
+            
+    async def execute_atomic_opportunity(self, opp):
+        """Execute atomic mint/merge transaction"""
+        if not self.executor or not self.clob_executor: return
+        
+        tx_hash = None
+        
+        # Strategy: SPLIT & SELL (Arb > 1.0)
+        if opp.direction == "SPLIT_SELL":
+            print(f"⚡ Executing SPLIT_SELL on {opp.market_title[:30]}...")
+            
+            # 1. Execute Split (On-Chain)
+            tx_hash = await self.executor.execute_split(opp.condition_id, self.max_position_size)
+            
+            if tx_hash:
+                if self.telegram:
+                     await self.telegram.send_message(f"✅ One-Chain Split Confirmed: {tx_hash}\nSelling tokens...")
+                
+                # 2. Sell Tokens (CLOB)
+                shares = self.max_position_size
+                
+                print(f"   Selling {shares} YES @ {opp.yes_price}...")
+                order_yes = self.clob_executor.place_order(
+                    token_id=opp.yes_token_id,
+                    side="SELL",
+                    price=opp.yes_price,
+                    size=shares
+                )
+                
+                print(f"   Selling {shares} NO @ {opp.no_price}...")
+                order_no = self.clob_executor.place_order(
+                    token_id=opp.no_token_id,
+                    side="SELL",
+                    price=opp.no_price,
+                    size=shares
+                )
+                
+                if order_yes and order_no:
+                    msg = f"💰 PROFIT SECURED!\nSold YES: {order_yes}\nSold NO: {order_no}"
+                    print(msg)
+                    if self.telegram: await self.telegram.send_message(msg)
+                else:
+                    err = f"⚠️ Sell Orders Incomplete. YES:{order_yes} NO:{order_no}. Check manual."
+                    print(err)
+                    if self.telegram: await self.telegram.send_message(err)
+
+        elif opp.direction == "BUY_MERGE":
+             # Strategy: BUY & MERGE (Not implemented yet)
+             pass
     
     async def get_active_token_id(self):
         """Fetch one active token ID from Gamma API"""
@@ -98,7 +165,35 @@ class AutomatedArbitrageBot:
             print(f"Failed to fetch MM token: {e}")
             return None
     
-    # ... run_scan_cycle ... (Same as before)
+    async def run_scan_cycle(self):
+        """Run one scan cycle"""
+        try:
+            # 1. Scanner Atómico
+            print("\n🔍 Scanning for Atomic Arbitrage...")
+            atomic_opps = await self.atomic_scanner.scan_for_opportunities()
+            
+            if atomic_opps:
+                print(f"✨ Found {len(atomic_opps)} atomic opportunities!")
+                for opp in atomic_opps:
+                    self.total_signals += 1
+                    if self.telegram:
+                        await self.telegram.send_atomic_alert(opp, self.max_position_size)
+                    if self.enable_atomic_execution:
+                        await self.execute_atomic_opportunity(opp)
+            
+            # 2. Scanner Inter-Exchange
+            print("\n🔍 Scanning for Inter-Exchange Arbitrage...")
+            opportunities = await self.detector.scan_for_opportunities()
+            for opp in opportunities:
+                await self.notify_opportunity(opp)
+            
+            if not opportunities and not atomic_opps:
+                print("   No opportunities found this cycle.")
+        
+        except Exception as e:
+            print(f"❌ Scan cycle error: {e}")
+            if self.telegram:
+                await self.telegram.send_message(f"⚠️ Scan error: {str(e)[:200]}")
 
     async def run(self):
         """Main bot loop - runs continuously"""
@@ -123,17 +218,13 @@ class AutomatedArbitrageBot:
             if token_id:
                 print(f"🔷 Starting MM for token {token_id}...")
                 self.market_maker = SimpleMarketMaker(token_ids=[str(token_id)])
-                # Run MM start in background
                 mm_task = asyncio.create_task(self.market_maker.start())
             else:
                 print("❌ Could not find token for Market Making.")
 
         try:
             while True:
-                # Run scan cycle
                 await self.run_scan_cycle()
-                
-                # Sleep interval
                 await asyncio.sleep(self.scan_interval)
                 
         except KeyboardInterrupt:
@@ -143,21 +234,15 @@ class AutomatedArbitrageBot:
             if self.telegram:
                 await self.telegram.send_message(f"🚨 BOT CRASHED: {str(e)[:200]}")
         finally:
-            # Stop MM
             if self.market_maker and hasattr(self.market_maker, 'feed'):
                await self.market_maker.feed.stop()
-            
-            # Close resources
             if hasattr(self.detector, 'close'):
                 await self.detector.close()
             
-            # Send final stats
-            uptime = (datetime.now() - self.start_time).total_seconds() / 3600
             if self.telegram:
+                uptime = (datetime.now() - self.start_time).total_seconds() / 3600
                 await self.telegram.send_message(
-                    f"Bot stopped\n"
-                    f"Uptime: {uptime:.1f}h\n"
-                    f"Signals Found: {self.total_signals}"
+                    f"Bot stopped\nUptime: {uptime:.1f}h\nSignals Found: {self.total_signals}"
                 )
 
 if __name__ == "__main__":
