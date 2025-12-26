@@ -4,7 +4,10 @@ import logging
 from typing import Dict, List, Optional
 from src.core.feed import MarketDataFeed
 from src.core.orderbook import OrderBook
+from src.core.feed import MarketDataFeed
+from src.core.orderbook import OrderBook
 from src.exchanges.polymarket_clob import PolymarketOrderExecutor
+import aiohttp
 
 class SimpleMarketMaker:
     """
@@ -27,35 +30,65 @@ class SimpleMarketMaker:
         
         # Track our open orders: TokenID -> {'BID': order_id, 'ASK': order_id}
         self.active_orders: Dict[str, Dict[str, str]] = {tid: {} for tid in token_ids}
-        
     async def start(self):
         print(f"[START] Starting Market Maker for {len(self.token_ids)} tokens... (Dry Run: {self.dry_run})")
+        
+        # Fetch Initial State (Snapshot)
+        await self.fetch_initial_book()
         
         # Start Feed
         asyncio.create_task(self.feed.start())
         
         # Subscribe
-        # Wait a bit for connection
         await asyncio.sleep(2) 
         self.feed.subscribe(self.token_ids)
         
         # Keep running
         while True:
             await asyncio.sleep(1)
+
+    async def fetch_initial_book(self):
+        """Fetch REST snapshot to initialize books"""
+        print("[INIT] Fetching initial orderbooks...")
+        async with aiohttp.ClientSession() as session:
+            for tid in self.token_ids:
+                try:
+                    url = f"https://clob.polymarket.com/book?token_id={tid}"
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            
+                            # Update Book
+                            book = self.books[tid]
+                            # Clear old?
+                            bids = data.get('bids', [])
+                            asks = data.get('asks', [])
+                            
+                            for b in bids: book.update('BUY', float(b['price']), float(b['size']))
+                            for a in asks: book.update('SELL', float(a['price']), float(a['size']))
+                            
+                            # Initial Quote
+                            mid = book.get_mid_price()
+                            if mid:
+                                await self.update_quotes(tid, mid, book)
+                                
+                except Exception as e:
+                    print(f"[ERR] Initial fetch failed for {tid}: {e}")
             
     async def on_market_update(self, msg: Dict):
         """Process WS message"""
         # DEBUG: Print raw message type
-        # print(f"[DEBUG] Msg received: {msg.get('event_type')} keys={list(msg.keys())}")
+        print(f"[DEBUG] Msg received: {msg.get('event_type')} id={msg.get('asset_id')}")
         
         event_type = msg.get("event_type")
         
         if event_type == "price_change":
             self.process_price_change(msg)
-        # elif event_type == "book":
-        #      print("[DEBUG] Book Snapshot received")
-        # else:
-        #      print(f"[DEBUG] Other event: {event_type}")
+        elif event_type == "book":
+             print("[DEBUG] Book Snapshot received")
+             # TODO: process snapshot
+        else:
+             print(f"[DEBUG] Other event: {event_type}")
             
     def process_price_change(self, msg: Dict):
         token_id = msg.get("asset_id")
