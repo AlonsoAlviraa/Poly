@@ -160,10 +160,11 @@ class AtomicArbitrageScanner:
         
         async with aiohttp.ClientSession() as session:
             tasks = []
-            sem = asyncio.Semaphore(20)  # Concurrency limit
+            sem = asyncio.Semaphore(5)  # Reduced from 20 to avoid 429s
             
             async def process_market(market, event):
                 async with sem:
+                    await asyncio.sleep(0.1) # Rate limit pacing
                     # Filter by Liquidity
                     liquidity = market.get("liquidityNum", 0)
                     if liquidity < 100: 
