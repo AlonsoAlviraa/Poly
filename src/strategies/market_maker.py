@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 from collections import deque
 from typing import Deque, Dict, List, Optional, Tuple
 
@@ -10,6 +11,75 @@ from src.core.orderbook import OrderBook
 from src.exchanges.polymarket_clob import PolymarketOrderExecutor
 
 logger = logging.getLogger(__name__)
+
+
+class SignalEnsembler:
+    """Lightweight online learner to blend book, trend, and whale signals.
+
+    This avoids heavyweight ML deps while still allowing us to fit signal weights
+    from labeled examples and produce a smooth 0-1 edge score.
+    """
+
+    def __init__(
+        self,
+        feature_weights: Optional[Dict[str, float]] = None,
+        bias: float = 0.05,
+        learning_rate: float = 0.25,
+        decay: float = 0.97,
+        min_fit_samples: int = 5,
+    ):
+        self.feature_weights = feature_weights or {
+            "spread": 0.08,
+            "imbalance": 0.14,
+            "volatility": 0.06,
+            "micro_trend": 0.08,
+            "liquidity_vacuum": 0.05,
+            "whale_pressure": 0.12,
+            "social_buzz": 0.05,
+            "whale_shadow_bias": 0.1,
+        }
+        self.bias = bias
+        self.learning_rate = learning_rate
+        self.decay = decay
+        self.min_fit_samples = min_fit_samples
+        self.trained_samples = 0
+
+    def _normalize(self, value: float) -> float:
+        return max(-1.0, min(1.0, value))
+
+    def predict(self, features: Dict[str, float]) -> float:
+        score = self.bias
+        for name, weight in self.feature_weights.items():
+            contrib = self._normalize(features.get(name, 0.0))
+            score += weight * contrib
+
+        prob = 1 / (1 + math.exp(-score))
+        return max(0.0, min(1.0, prob))
+
+    def fit(self, labeled_samples: List[Dict[str, Dict[str, float]]]) -> None:
+        """Update weights using simple online gradient steps.
+
+        Each sample is {"features": {...}, "label": float 0-1}.
+        """
+
+        if not labeled_samples:
+            return
+
+        for sample in labeled_samples:
+            features = sample.get("features", {})
+            label = max(0.0, min(1.0, float(sample.get("label", 0.0))))
+            pred = self.predict(features)
+            error = label - pred
+            for name, weight in self.feature_weights.items():
+                feat = self._normalize(features.get(name, 0.0))
+                self.feature_weights[name] = weight * self.decay + self.learning_rate * error * feat
+
+            self.bias = self.bias * self.decay + self.learning_rate * error * 0.1
+            self.trained_samples += 1
+
+    @property
+    def ready(self) -> bool:
+        return self.trained_samples >= self.min_fit_samples
 
 
 class SimpleMarketMaker:
@@ -41,6 +111,8 @@ class SimpleMarketMaker:
         risk_pause_trend_multiplier: float = 2.0,
         social_sentiment_bias: float = 0.5,
         whale_pressure_widen: float = 0.2,
+        ml_edge_weight: float = 0.35,
+        signal_model: Optional[SignalEnsembler] = None,
     ):
         self.token_ids = token_ids
         self.executor = executor
@@ -60,6 +132,8 @@ class SimpleMarketMaker:
         self.risk_pause_trend_multiplier = risk_pause_trend_multiplier
         self.social_sentiment_bias = social_sentiment_bias
         self.whale_pressure_widen = whale_pressure_widen
+        self.ml_edge_weight = ml_edge_weight
+        self.signal_model = signal_model or SignalEnsembler()
         self.books: Dict[str, OrderBook] = {tid: OrderBook(tid) for tid in token_ids}
         self.feed = MarketDataFeed()
         self.feed.add_callback(self.on_market_update)
@@ -74,6 +148,7 @@ class SimpleMarketMaker:
             tid: {"sentiment": 0.0, "buzz": 0.0, "whale_pressure": 0.0}
             for tid in token_ids
         }
+        self.whale_heat: Dict[str, Deque[float]] = {tid: deque(maxlen=50) for tid in token_ids}
 
     async def start(self):
         logger.info(
@@ -149,6 +224,37 @@ class SimpleMarketMaker:
         }
         self.social_signals[token_id].update(sanitized)
 
+    def record_whale_action(
+        self,
+        token_id: str,
+        side: str,
+        size: float,
+        confidence: float = 0.5,
+    ) -> None:
+        """Track signed whale flow to bias quoting and ML signals.
+
+        Side is BUY/SELL. Confidence and size modulate intensity and also feed back
+        into whale_pressure for compatibility with prior logic.
+        """
+
+        if token_id not in self.whale_heat:
+            return
+
+        signed = 1.0 if side.upper() == "BUY" else -1.0
+        intensity = max(0.0, min(1.0, confidence)) * min(1.0, size / max(self.size, 1e-6))
+        weighted = signed * intensity
+        self.whale_heat[token_id].append(weighted)
+
+        whale_pressure = max(0.0, sum(self.whale_heat[token_id]) / len(self.whale_heat[token_id]))
+        self.social_signals[token_id]["whale_pressure"] = whale_pressure
+
+    def train_signal_model(self, labeled_samples: List[Dict[str, Dict[str, float]]]) -> None:
+        """Allow external processes to fit the online ensembler."""
+
+        if not self.signal_model:
+            return
+        self.signal_model.fit(labeled_samples)
+
     async def process_book_snapshot(self, msg: Dict):
         token_id = msg.get("asset_id")
         if not token_id or token_id not in self.books:
@@ -220,6 +326,7 @@ class SimpleMarketMaker:
         social = self.social_signals.get(
             token_id, {"sentiment": 0.0, "buzz": 0.0, "whale_pressure": 0.0}
         )
+        whale_shadow = self._compute_whale_shadow(token_id)
         metrics = {
             "mid": mid,
             "spread": spread,
@@ -235,6 +342,7 @@ class SimpleMarketMaker:
             "social_sentiment": social.get("sentiment", 0.0),
             "social_buzz": social.get("buzz", 0.0),
             "whale_pressure": social.get("whale_pressure", 0.0),
+            "whale_shadow_bias": whale_shadow,
         }
 
         return metrics
@@ -259,6 +367,14 @@ class SimpleMarketMaker:
         if len(window) < 2 or window[0] == 0:
             return 0.0
         return round((window[-1] - window[0]) / window[0], 6)
+
+    def _compute_whale_shadow(self, token_id: str) -> float:
+        flow = self.whale_heat.get(token_id)
+        if not flow:
+            return 0.0
+
+        avg_flow = sum(flow) / len(flow)
+        return round(max(-1.0, min(1.0, avg_flow)), 4)
 
     def _should_pause_quotes(self, metrics: Dict) -> Tuple[bool, Optional[str]]:
         volatility = metrics.get("volatility", 0.0)
@@ -311,15 +427,18 @@ class SimpleMarketMaker:
         social_sentiment = metrics.get("social_sentiment", 0.0)
         social_buzz = metrics.get("social_buzz", 0.0)
         whale_pressure = metrics.get("whale_pressure", 0.0)
+        whale_shadow = metrics.get("whale_shadow_bias", 0.0)
 
         base_half *= 1 + social_buzz * 0.1
         base_half *= 1 + whale_pressure * self.whale_pressure_widen
+        base_half *= 1 + abs(whale_shadow) * 0.1
 
         sentiment_skew = social_sentiment * self.social_sentiment_bias * base_half * 0.5
+        shadow_skew = whale_shadow * base_half * 0.35
 
         skew = metrics.get("imbalance", 0.0) * self.inventory_skew * base_half
-        my_bid = round(mid - base_half - skew - trend_skew + sentiment_skew, 3)
-        my_ask = round(mid + base_half - skew - trend_skew + sentiment_skew, 3)
+        my_bid = round(mid - base_half - skew - trend_skew + sentiment_skew + shadow_skew, 3)
+        my_ask = round(mid + base_half - skew - trend_skew + sentiment_skew + shadow_skew, 3)
 
         if my_bid <= 0 or my_ask >= 1.0 or my_bid >= my_ask:
             return None
@@ -343,8 +462,9 @@ class SimpleMarketMaker:
         sentiment_edge = min(1.0, abs(metrics.get("social_sentiment", 0.0))) * 0.05
         buzz_edge = min(1.0, metrics.get("social_buzz", 0.0)) * 0.05
         whale_edge = min(1.0, metrics.get("whale_pressure", 0.0)) * 0.05
+        shadow_edge = min(1.0, abs(metrics.get("whale_shadow_bias", 0.0))) * 0.06
 
-        return round(
+        heuristic_score = round(
             spread_edge
             + imbalance_edge
             + momentum_edge
@@ -354,9 +474,30 @@ class SimpleMarketMaker:
             + depth_edge
             + sentiment_edge
             + buzz_edge
-            + whale_edge,
+            + whale_edge
+            + shadow_edge,
             3,
         )
+
+        ml_score = 0.0
+        if self.signal_model:
+            ml_features = self._build_ml_features(metrics)
+            ml_score = self.signal_model.predict(ml_features)
+
+        combo = heuristic_score * (1 - self.ml_edge_weight) + ml_score * self.ml_edge_weight
+        return round(min(1.0, combo), 3)
+
+    def _build_ml_features(self, metrics: Dict) -> Dict[str, float]:
+        return {
+            "spread": metrics.get("spread", 0.0),
+            "imbalance": metrics.get("imbalance", 0.0),
+            "volatility": metrics.get("volatility", 0.0),
+            "micro_trend": metrics.get("micro_trend", 0.0),
+            "liquidity_vacuum": 1.0 if metrics.get("liquidity_vacuum") else 0.0,
+            "whale_pressure": metrics.get("whale_pressure", 0.0),
+            "social_buzz": metrics.get("social_buzz", 0.0),
+            "whale_shadow_bias": metrics.get("whale_shadow_bias", 0.0),
+        }
 
     def find_opportunities(self) -> List[Dict]:
         """Rank tokens with actionable mechanics (wide spread, imbalance, or drift)."""
@@ -394,6 +535,10 @@ class SimpleMarketMaker:
                 mechanics.append("sentiment leaning")
             if metrics.get("whale_pressure", 0.0) >= 0.5:
                 mechanics.append("whale shadowing")
+            if abs(metrics.get("whale_shadow_bias", 0.0)) >= 0.3:
+                mechanics.append("alpha wallet shadow")
+            if self.signal_model and self.signal_model.ready:
+                mechanics.append("ml edge confirmation")
 
             ranked.append({
                 "token_id": token_id,

@@ -27,6 +27,10 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 WHALE_WALLETS_RAW = os.getenv("WHALE_WALLETS", "")
 WHALE_WALLETS = [w.strip() for w in WHALE_WALLETS_RAW.split(",") if w.strip()]
 
+# Whale tracking configuration (used by spy/copy strategies)
+WHALE_WALLETS_RAW = os.getenv("WHALE_WALLETS", "")
+WHALE_WALLETS = [w.strip() for w in WHALE_WALLETS_RAW.split(",") if w.strip()]
+
 # PolygonScan (optional but recommended for rate limits)
 POLYGONSCAN_API_KEY = os.getenv("POLYGONSCAN_API_KEY", "YourApiKeyToken")
 
