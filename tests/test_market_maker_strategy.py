@@ -103,3 +103,22 @@ def test_find_opportunities_ranks_mechanics(bids, asks, threshold, expected_toke
         assert top_mechanic in opportunities[0]["mechanics"]
 
 
+
+def test_volatility_pause():
+    maker = SimpleMarketMaker(["T"], dry_run=True, volatility_window=5, volatility_threshold=0.05)
+    book = build_book({0.5: 100}, {0.52: 100})
+    maker.books["T"] = book
+
+    # Feed volatile prices
+    prices = [0.5, 0.6, 0.4, 0.7, 0.3] # High variance
+    for p in prices:
+        maker._update_history("T", p)
+        
+    metrics = maker.compute_book_metrics("T", book)
+    
+    # Assert Volatility Detected
+    assert metrics["volatility"] > 0.05
+    
+    # Assert Quote Paused
+    quote = maker._generate_quote_prices("T", 0.5, book, metrics)
+    assert quote is None
