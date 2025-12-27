@@ -1,7 +1,6 @@
 import asyncio
 import logging
-from collections import deque
-from typing import Deque, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -32,13 +31,6 @@ class SimpleMarketMaker:
         inventory_skew: float = 0.05,
         wide_spread_threshold: float = 0.04,
         opportunity_score_threshold: float = 0.6,
-        volatility_window: int = 12,
-        volatility_threshold: float = 0.01,
-        momentum_window: int = 5,
-        trend_threshold: float = 0.004,
-        vacuum_depth_threshold: float = 0.2,
-        risk_pause_vol_multiplier: float = 2.5,
-        risk_pause_trend_multiplier: float = 2.0,
     ):
         self.token_ids = token_ids
         self.executor = executor
@@ -49,13 +41,6 @@ class SimpleMarketMaker:
         self.inventory_skew = inventory_skew
         self.wide_spread_threshold = wide_spread_threshold
         self.opportunity_score_threshold = opportunity_score_threshold
-        self.volatility_window = max(3, volatility_window)
-        self.volatility_threshold = volatility_threshold
-        self.momentum_window = max(2, momentum_window)
-        self.trend_threshold = trend_threshold
-        self.vacuum_depth_threshold = vacuum_depth_threshold
-        self.risk_pause_vol_multiplier = risk_pause_vol_multiplier
-        self.risk_pause_trend_multiplier = risk_pause_trend_multiplier
         self.books: Dict[str, OrderBook] = {tid: OrderBook(tid) for tid in token_ids}
         self.feed = MarketDataFeed()
         self.feed.add_callback(self.on_market_update)
@@ -63,9 +48,6 @@ class SimpleMarketMaker:
         # Track our open orders: TokenID -> {'BID': order_id, 'ASK': order_id}
         self.active_orders: Dict[str, Dict[str, str]] = {tid: {} for tid in token_ids}
         self.last_mid: Dict[str, float] = {}
-        self.mid_history: Dict[str, Deque[float]] = {
-            tid: deque(maxlen=self.volatility_window) for tid in token_ids
-        }
 
     async def start(self):
         logger.info(
@@ -82,7 +64,18 @@ class SimpleMarketMaker:
         self.feed.subscribe(self.token_ids)
 
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(10)
+            # Periodic Opportunity Scan
+            opps = self.find_opportunities()
+            if opps:
+                top = opps[:3]
+                for op in top:
+                    logger.info(
+                        "[OPP] Token %s... | Score: %.2f | Mechanics: %s",
+                        op['token_id'][:8],
+                        op['score'],
+                        ", ".join(op['mechanics'])
+                    )
 
     async def fetch_initial_book(self):
         """Fetch REST snapshot to initialize books."""
@@ -163,8 +156,8 @@ class SimpleMarketMaker:
 
     def compute_book_metrics(self, token_id: str, book: Optional[OrderBook] = None) -> Dict:
         book = book or self.books[token_id]
-        bb, bb_size = book.get_best_bid()
-        ba, ba_size = book.get_best_ask()
+        bb, _ = book.get_best_bid()
+        ba, _ = book.get_best_ask()
         mid = book.get_mid_price()
         spread = book.get_spread()
 
@@ -172,20 +165,11 @@ class SimpleMarketMaker:
         ask_depth = sum(book.asks.values())
         total_depth = bid_depth + ask_depth
         imbalance = 0.0
-        top_depth_share = 0.0
         if total_depth > 0:
             imbalance = (bid_depth - ask_depth) / total_depth
-            top_depth_share = (bb_size + ba_size) / total_depth
 
         prev_mid = self.last_mid.get(token_id, mid or 0.0)
         mid_change = (mid or prev_mid) - prev_mid
-
-        if mid is not None:
-            self._record_mid(token_id, mid)
-            self.last_mid[token_id] = mid
-
-        volatility = self._compute_volatility(token_id)
-        trend = self._compute_trend(token_id)
         metrics = {
             "mid": mid,
             "spread": spread,
@@ -194,65 +178,17 @@ class SimpleMarketMaker:
             "imbalance": imbalance,
             "wide_spread": bool(spread is not None and spread >= self.wide_spread_threshold),
             "mid_change": mid_change,
-            "volatility": volatility,
-            "micro_trend": trend,
-            "top_depth_share": top_depth_share,
-            "liquidity_vacuum": bool(top_depth_share <= self.vacuum_depth_threshold),
         }
 
+        if mid is not None:
+            self.last_mid[token_id] = mid
+
         return metrics
-
-    def _record_mid(self, token_id: str, mid: float):
-        history = self.mid_history.setdefault(token_id, deque(maxlen=self.volatility_window))
-        history.append(mid)
-
-    def _compute_volatility(self, token_id: str) -> float:
-        history = self.mid_history.get(token_id, deque())
-        if len(history) < 2:
-            return 0.0
-        mean = sum(history) / len(history)
-        variance = sum((p - mean) ** 2 for p in history) / len(history)
-        return round(variance**0.5, 6)
-
-    def _compute_trend(self, token_id: str) -> float:
-        history = self.mid_history.get(token_id, deque())
-        if len(history) < 2:
-            return 0.0
-        window = list(history)[-self.momentum_window :]
-        if len(window) < 2 or window[0] == 0:
-            return 0.0
-        return round((window[-1] - window[0]) / window[0], 6)
-
-    def _should_pause_quotes(self, metrics: Dict) -> Tuple[bool, Optional[str]]:
-        volatility = metrics.get("volatility", 0.0)
-        trend = abs(metrics.get("micro_trend", 0.0))
-
-        extreme_vol = volatility >= self.volatility_threshold * self.risk_pause_vol_multiplier
-        extreme_trend = trend >= self.trend_threshold * self.risk_pause_trend_multiplier
-
-        if extreme_vol and extreme_trend:
-            return True, "volatility_and_trend"
-        if extreme_vol:
-            return True, "volatility"
-        if extreme_trend:
-            return True, "trend"
-
-        return False, None
 
     def _generate_quote_prices(
         self, token_id: str, mid: float, book: OrderBook, metrics: Optional[Dict] = None
     ) -> Optional[Tuple[float, float]]:
         metrics = metrics or self.compute_book_metrics(token_id, book)
-        should_pause, pause_reason = self._should_pause_quotes(metrics)
-        if should_pause:
-            logger.info(
-                "[PAUSE] Skipping quotes due to %s | vol=%.4f trend=%.4f",
-                pause_reason,
-                metrics.get("volatility", 0.0),
-                metrics.get("micro_trend", 0.0),
-            )
-            return None
-
         bb, _ = book.get_best_bid()
         ba, _ = book.get_best_ask()
 
@@ -263,17 +199,9 @@ class SimpleMarketMaker:
         if metrics.get("wide_spread") and metrics.get("spread"):
             base_half = min(base_half, metrics["spread"] * self.inside_spread_ratio / 2)
 
-        volatility = metrics.get("volatility", 0.0)
-        if volatility > self.volatility_threshold:
-            vol_ratio = min(3.0, (volatility - self.volatility_threshold) / max(self.volatility_threshold, 1e-6))
-            base_half *= 1 + vol_ratio * 0.15
-
-        trend_bias = metrics.get("micro_trend", 0.0)
-        trend_skew = trend_bias * self.inside_spread_ratio * base_half
-
         skew = metrics.get("imbalance", 0.0) * self.inventory_skew * base_half
-        my_bid = round(mid - base_half - skew - trend_skew, 3)
-        my_ask = round(mid + base_half - skew - trend_skew, 3)
+        my_bid = round(mid - base_half - skew, 3)
+        my_ask = round(mid + base_half - skew, 3)
 
         if my_bid <= 0 or my_ask >= 1.0 or my_bid >= my_ask:
             return None
@@ -288,23 +216,10 @@ class SimpleMarketMaker:
         if metrics.get("spread"):
             spread_edge = min(1.0, metrics["spread"] / max(self.spread, 0.001)) * 0.5
 
-        imbalance_edge = min(1.0, abs(metrics.get("imbalance", 0.0))) * 0.25
-        momentum_edge = min(1.0, abs(metrics.get("mid_change", 0.0))) * 0.08
-        volatility_edge = min(1.0, metrics.get("volatility", 0.0) / max(self.volatility_threshold, 1e-6)) * 0.07
-        vacuum_edge = 0.07 if metrics.get("liquidity_vacuum") else 0.0
-        trend_edge = min(1.0, abs(metrics.get("micro_trend", 0.0)) / max(self.trend_threshold, 1e-6)) * 0.08
-        depth_edge = min(1.0, max(0.0, 1 - metrics.get("top_depth_share", 0.0))) * 0.05
+        imbalance_edge = min(1.0, abs(metrics.get("imbalance", 0.0))) * 0.3
+        momentum_edge = min(1.0, abs(metrics.get("mid_change", 0.0))) * 0.2
 
-        return round(
-            spread_edge
-            + imbalance_edge
-            + momentum_edge
-            + volatility_edge
-            + vacuum_edge
-            + trend_edge
-            + depth_edge,
-            3,
-        )
+        return round(spread_edge + imbalance_edge + momentum_edge, 3)
 
     def find_opportunities(self) -> List[Dict]:
         """Rank tokens with actionable mechanics (wide spread, imbalance, or drift)."""
@@ -326,16 +241,6 @@ class SimpleMarketMaker:
                 mechanics.append("inventory skew")
             if abs(metrics["mid_change"]) >= 0.005:
                 mechanics.append("micro-momentum follow")
-            if metrics.get("liquidity_vacuum"):
-                mechanics.append("liquidity vacuum sniping")
-            if metrics.get("volatility", 0.0) >= self.volatility_threshold:
-                mechanics.append("volatility breakout capture")
-            if abs(metrics.get("micro_trend", 0.0)) >= self.trend_threshold:
-                mechanics.append("trend leaning")
-            if metrics.get("volatility", 0.0) >= self.volatility_threshold * self.risk_pause_vol_multiplier:
-                mechanics.append("volatility retreat")
-            if metrics.get("liquidity_vacuum") and metrics.get("spread", 0) >= self.wide_spread_threshold * 1.5:
-                mechanics.append("vacuum wide staggering")
 
             ranked.append({
                 "token_id": token_id,
