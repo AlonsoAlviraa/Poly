@@ -1,7 +1,7 @@
 
 import asyncio
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 from src.exchanges.polymarket_clob import PolymarketOrderExecutor
 from src.strategies.spy_network import PolygonSpy
 from src.strategies.whale_hunter import WhaleHunter
@@ -15,12 +15,13 @@ class CopyBot:
     Includes Auto-Discovery Mode (WhaleHunter).
     """
 
-    def __init__(self, target_wallets: List[str], executor: PolymarketOrderExecutor, scale_factor: float = 0.1, max_bet: float = 50.0):
+    def __init__(self, target_wallets: List[str], executor: PolymarketOrderExecutor, scale_factor: float = 0.1, max_bet: float = 50.0, market_maker_callback: Optional[Callable] = None):
         self.target_wallets = target_wallets
         self.executor = executor
         self.scale_factor = scale_factor
         self.max_bet = max_bet
         self.active = False
+        self.mm_callback = market_maker_callback
         
         # Auto-Discovery
         self.hunter = WhaleHunter(limit=10) # Auto-find top 10 whales
@@ -85,6 +86,13 @@ class CopyBot:
         
         # Log and Alert
         # logger.info(f"[COPY] 🎯 MATCH: {wallet[:6]} {side} {token_id} (Amt: {amount})")
+
+        # Notify Market Maker (Shadowing)
+        if self.mm_callback:
+            try:
+                self.mm_callback(token_id, side, float(amount))
+            except Exception as e:
+                logger.error(f"[COPY] MM Callback failed: {e}")
 
         # Mega Debugger Hook
         from src.utils.mega_debugger import MegaDebugger

@@ -191,6 +191,8 @@ class SimpleMarketMaker:
 
         # Track our open orders: TokenID -> {'BID': order_id, 'ASK': order_id}
         self.active_orders: Dict[str, Dict[str, str]] = {tid: {} for tid in token_ids}
+        # Track open order details for diffing: TokenID -> {'BID': {'price': p, 'size': s}, ...}
+        self.active_order_state: Dict[str, Dict[str, Dict[str, float]]] = {tid: {} for tid in token_ids}
         self.last_mid: Dict[str, float] = {}
         self.mid_history: Dict[str, Deque[float]] = {
             tid: deque(maxlen=self.volatility_window) for tid in token_ids
@@ -851,14 +853,42 @@ class SimpleMarketMaker:
         self, token_id: str, bid_price: float, ask_price: float, *, size: Optional[float] = None
     ):
         """
-        Cancel previous orders and place new ones.
-        This is a naive implementation (Cancel-All-Replace).
-        Pro version would diff/amend.
+        Execute quotes using diff-based logic (Smart Execution).
+        Only cancels/replaces if price or size changes meaningfully.
         """
         if not self.executor:
             logger.warning("No executor configured; skipping live quote placement")
             return
 
+        chosen_size = self.size if size is None else size
+        stored_state = self.active_order_state.get(token_id, {})
+        
+        # Check if we need to update
+        bid_state = stored_state.get("BID", {})
+        ask_state = stored_state.get("ASK", {})
+        
+        price_tol = 0.0001
+        size_tol = 0.01
+        
+        bid_same = (
+            self.active_orders[token_id].get("BID") 
+            and abs(bid_state.get("price", 0) - bid_price) < price_tol 
+            and abs(bid_state.get("size", 0) - chosen_size) < size_tol
+        )
+        
+        ask_same = (
+            self.active_orders[token_id].get("ASK") 
+            and abs(ask_state.get("price", 0) - ask_price) < price_tol 
+            and abs(ask_state.get("size", 0) - chosen_size) < size_tol
+        )
+        
+        if bid_same and ask_same:
+            # logger.debug("[EXEC] Skipping update for %s (No change)", token_id)
+            return
+
+        # Fallback to Cancel-All-Replace (Simplest robust approach)
+        # Improvement: We could only cancel the side that changed, but for now safe > sorry.
+        
         orders = self.active_orders.get(token_id, {})
         loop = asyncio.get_running_loop()
 
@@ -871,8 +901,6 @@ class SimpleMarketMaker:
         if cancel_tasks:
             await asyncio.gather(*cancel_tasks, return_exceptions=True)
 
-        chosen_size = self.size if size is None else size
-
         bid_oid = await loop.run_in_executor(
             None, self.executor.place_order, token_id, "BUY", bid_price, chosen_size
         )
@@ -881,6 +909,10 @@ class SimpleMarketMaker:
         )
 
         self.active_orders[token_id] = {"BID": bid_oid, "ASK": ask_oid}
+        self.active_order_state[token_id] = {
+            "BID": {"price": bid_price, "size": chosen_size},
+            "ASK": {"price": ask_price, "size": chosen_size}
+        }
 
 
 if __name__ == "__main__":

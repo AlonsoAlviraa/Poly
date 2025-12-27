@@ -11,8 +11,12 @@ logger = logging.getLogger(__name__)
 
 class MockExecutor:
     """Mock executor that does nothing but log."""
-    def place_order(self, *args, **kwargs): return "mock_oid"
-    def cancel_order(self, *args, **kwargs): pass
+    def place_order(self, *args, **kwargs): 
+        # print(f"[MOCK] Placing order: {args}")
+        return "mock_oid"
+    def cancel_order(self, *args, **kwargs): 
+        # print(f"[MOCK] Cancelling order: {args}")
+        pass
 
 async def run_simulation():
     logger.info("🚀 Starting Paper Trading Simulation...")
@@ -26,7 +30,7 @@ async def run_simulation():
         executor=MockExecutor(),
         spread=0.05,
         size=100.0,
-        canary_guard=None, # Let it run free initially
+        canary_guard=None, 
     )
     
     # Mock Feed: We will drive it manually

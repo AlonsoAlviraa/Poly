@@ -12,6 +12,7 @@ from src.core.atomic_executor import AtomicExecutor
 from src.exchanges.polymarket_clob import PolymarketOrderExecutor
 from src.strategies.market_maker import SimpleMarketMaker
 from src.core.risk import CanaryGuard, DrawdownGuard, OperationalCircuitBreaker
+from src.collectors.sentiment_engine import sentiment_engine
 from src.wallet.wallet_manager import WalletManager
 from src.utils.telegram_bot import TelegramBot
 from dotenv import load_dotenv
@@ -212,6 +213,23 @@ class AutomatedArbitrageBot:
         except Exception as e:
             print(f"Failed to fetch MM token: {e}")
             return None
+
+    async def _poll_sentiment(self, token_id: str):
+        """Periodically fetch social sentiment and feed it to MM."""
+        while True:
+            try:
+                # We use token_id as slug placeholder for now
+                data = await sentiment_engine.get_sentiment(token_id)
+                if self.market_maker:
+                    self.market_maker.ingest_social_signal(
+                        token_id=token_id,
+                        sentiment=data.get("sentiment", 0.0),
+                        buzz=data.get("buzz", 0.0)
+                    )
+                await asyncio.sleep(30)
+            except Exception as e:
+                print(f"Sentiment poll error: {e}")
+                await asyncio.sleep(60)
     
     async def run_scan_cycle(self):
         """Run one scan cycle"""
@@ -296,6 +314,7 @@ class AutomatedArbitrageBot:
                     drawdown_guard=drawdown_guard
                 )
                 mm_task = asyncio.create_task(self.market_maker.start())
+                asyncio.create_task(self._poll_sentiment(str(token_id)))
             else:
                 print("❌ Could not find token for Market Making.")
 
@@ -307,13 +326,23 @@ class AutomatedArbitrageBot:
             from config import WHALE_WALLETS
             
             # Start CopyBot even if WHALE_WALLETS is empty (Auto-Discovery)
+            # Start CopyBot
             print(f"🐋 Starting CopyBot (Spy Network)...")
-            if WHALE_WALLETS:
-                print(f"   Tracking {len(WHALE_WALLETS)} static whales from config.")
-            else:
-                print(f"   No static whales. Relying on Auto-Discovery (WhaleHunter).")
+            
+            def handle_whale_shadow(token_id: str, side: str, amount: float):
+                """Bridge between CopyBot (Spy) and Market Maker (Brain)"""
+                if self.market_maker and hasattr(self.market_maker, 'record_whale_action'):
+                    # Async context might be an issue. CopyBot calls this from async method.
+                    # record_whale_action is synchronous (updates simple dict state), so it's fine.
+                    self.market_maker.record_whale_action(token_id, side, amount, confidence=0.9)
+                    # print(f"[BRIDGE] 🔗 Whale action relayed to MM: {side} {token_id}")
 
-            self.copy_bot = CopyBot(WHALE_WALLETS, self.clob_executor)
+            if WHALE_WALLETS:
+                 print(f"   Tracking {len(WHALE_WALLETS)} static whales from config.")
+            else:
+                 print(f"   No static whales. Relying on Auto-Discovery (WhaleHunter).")
+
+            self.copy_bot = CopyBot(WHALE_WALLETS, self.clob_executor, market_maker_callback=handle_whale_shadow)
             asyncio.create_task(self.copy_bot.start())
 
 
