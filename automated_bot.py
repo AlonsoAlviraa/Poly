@@ -275,10 +275,16 @@ class AutomatedArbitrageBot:
             token_id = await self.get_active_token_id()
             if token_id:
                 print(f"🔷 Starting MM for token {token_id}...")
+                # Define a callback wrapper for async telegram send
+                async def telegram_cb(msg):
+                    if self.telegram:
+                        await self.telegram.send_message(msg)
+
                 self.market_maker = SimpleMarketMaker(
                     token_ids=[str(token_id)],
                     executor=self.clob_executor,
-                    dry_run=self.mm_dry_run
+                    dry_run=self.mm_dry_run,
+                    telegram_callback=telegram_cb
                 )
                 mm_task = asyncio.create_task(self.market_maker.start())
             else:

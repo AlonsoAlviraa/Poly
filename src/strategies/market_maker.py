@@ -3,7 +3,7 @@ import logging
 import math
 from collections import deque
 from datetime import datetime
-from typing import Deque, Dict, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Tuple, Callable
 
 import aiohttp
 
@@ -149,10 +149,12 @@ class SimpleMarketMaker:
         execution_monitor: Optional[ExecutionQualityMonitor] = None,
         drawdown_guard: Optional[DrawdownGuard] = None,
         stale_quote_seconds: float = 5.0,
+        telegram_callback: Optional[Callable[[str], None]] = None,
     ):
         self.token_ids = token_ids
         self.executor = executor
         self.dry_run = dry_run
+        self.telegram_callback = telegram_callback
         self.spread = spread  # 2 cents spread by default
         self.size = size
         self.inside_spread_ratio = inside_spread_ratio
@@ -180,6 +182,12 @@ class SimpleMarketMaker:
         self.books: Dict[str, OrderBook] = {tid: OrderBook(tid) for tid in token_ids}
         self.feed = MarketDataFeed()
         self.feed.add_callback(self.on_market_update)
+
+        # Paper Trading State
+        self.paper_pnl = 0.0
+        self.paper_trades_count = 0
+        self.paper_positions: Dict[str, float] = {tid: 0.0 for tid in token_ids} # tid -> shares
+        self.active_paper_orders: Dict[str, Dict[str, float]] = {tid: {} for tid in token_ids} # tid -> {'BID': price, 'ASK': price}
 
         # Track our open orders: TokenID -> {'BID': order_id, 'ASK': order_id}
         self.active_orders: Dict[str, Dict[str, str]] = {tid: {} for tid in token_ids}
@@ -781,6 +789,49 @@ class SimpleMarketMaker:
 
         if self.dry_run:
             logger.info("%s (DRY)", log_msg)
+            
+            # --- Paper Trading Simulation ---
+            prev_orders = self.active_paper_orders.get(token_id, {})
+            prev_bid = prev_orders.get("BID")
+            prev_ask = prev_orders.get("ASK")
+            
+            # Check for simulated fills (market crossed our quote)
+            fill_msg = None
+            if prev_bid and ba <= prev_bid:  # Market ask hit our bid -> We bought
+                pnl_this = (mid - prev_bid) * self.size  # Unrealized gain
+                self.paper_positions[token_id] = self.paper_positions.get(token_id, 0) + self.size
+                self.paper_trades_count += 1
+                fill_msg = f"🟢 *PAPER FILL (BUY)*\nToken: `{token_id[:12]}...`\nFilled @ {prev_bid:.3f}\nPosition: +{self.size} shares\n"
+                
+            if prev_ask and bb >= prev_ask:  # Market bid hit our ask -> We sold
+                pnl_this = (prev_ask - mid) * self.size
+                self.paper_positions[token_id] = self.paper_positions.get(token_id, 0) - self.size
+                self.paper_trades_count += 1
+                fill_msg = f"🔴 *PAPER FILL (SELL)*\nToken: `{token_id[:12]}...`\nFilled @ {prev_ask:.3f}\nPosition: -{self.size} shares\n"
+            
+            # Store new quotes
+            self.active_paper_orders[token_id] = {"BID": my_bid, "ASK": my_ask}
+            
+            # Send fill notification
+            if fill_msg and self.telegram_callback:
+                # Calculate running PnL from positions
+                total_unrealized = sum(
+                    self.paper_positions.get(tid, 0) * (self.books[tid].get_mid_price() or 0)
+                    for tid in self.token_ids
+                )
+                fill_msg += f"📊 Total Trades: {self.paper_trades_count}\n💰 Unrealized Value: ${total_unrealized:.2f}"
+                asyncio.create_task(self.telegram_callback(fill_msg))
+            
+            # High-confidence prediction alert (less frequent)
+            if metrics and metrics.get("ml_edge", 0) > 0.7 and self.telegram_callback:
+                msg = (
+                    f"📝 *PAPER TRADE PREDICTION*\n"
+                    f"Token: `{token_id[:12]}...`\n"
+                    f"Bid: {my_bid:.3f} | Ask: {my_ask:.3f}\n"
+                    f"ML Edge: {metrics.get('ml_edge', 0):.2f}\n"
+                    f"Regime: {metrics.get('regime_tag', 'normal')}"
+                )
+                asyncio.create_task(self.telegram_callback(msg))
         else:
             if self.canary_guard:
                 notional = max(mid, 0.0) * quote_size
