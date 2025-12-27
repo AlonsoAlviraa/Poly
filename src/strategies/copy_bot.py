@@ -4,6 +4,7 @@ import logging
 from typing import List, Dict, Optional
 from src.exchanges.polymarket_clob import PolymarketOrderExecutor
 from src.strategies.spy_network import PolygonSpy
+from src.strategies.whale_hunter import WhaleHunter
 from src.utils.notifier import send_telegram_alert
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 class CopyBot:
     """
     KOPY KAT v1: Follows 'Whale' wallets via direct On-Chain/PolygonScan polling.
+    Includes Auto-Discovery Mode (WhaleHunter).
     """
 
     def __init__(self, target_wallets: List[str], executor: PolymarketOrderExecutor, scale_factor: float = 0.1, max_bet: float = 50.0):
@@ -20,14 +22,48 @@ class CopyBot:
         self.max_bet = max_bet
         self.active = False
         
+        # Auto-Discovery
+        self.hunter = WhaleHunter(limit=10) # Auto-find top 10 whales
+        
         # Initialize Spy
         self.spy = PolygonSpy(self.target_wallets, self.on_trade_event)
     
     async def start(self):
         self.active = True
         logger.info(f"[COPY] Started CopyBot observing {len(self.target_wallets)} whales.")
+        
+        # Initial Whale Hunt
+        await self.refresh_targets()
+        
+        # Start Spy
         asyncio.create_task(self.spy.start())
         
+        # Periodic Refresh Task
+        asyncio.create_task(self.auto_refresh_loop())
+        
+    async def refresh_targets(self):
+        """Fetch top whales and update Spy targets."""
+        try:
+            new_whales = await self.hunter.fetch_top_whales()
+            if new_whales:
+                addresses = [w['address'] for w in new_whales]
+                # Merge with config whales
+                for addr in addresses:
+                    if addr.lower() not in [t.lower() for t in self.target_wallets]:
+                        self.target_wallets.append(addr)
+                        logger.info(f"[COPY] ➕ Added new Alpha Wallet: {addr[:6]}... ({w['name']})")
+                
+                # Update Spy
+                self.spy.targets = [t.lower() for t in self.target_wallets]
+                logger.info(f"[COPY] Spy Network now tracking {len(self.spy.targets)} targets.")
+        except Exception as e:
+            logger.error(f"[COPY] Failed to refresh targets: {e}")
+
+    async def auto_refresh_loop(self):
+        while self.active:
+            await asyncio.sleep(3600 * 4) # Every 4 hours
+            await self.refresh_targets()
+
     async def stop(self):
         self.active = False
         await self.spy.stop()
@@ -56,13 +92,3 @@ class CopyBot:
             f"🔗 [View TX](https://polygonscan.com/tx/{trade['tx_hash']})"
         )
         send_telegram_alert(msg)
-        
-        # Execute Copy
-        # We need PRICE to place a LIMIT order. Spy doesn't give price easily (just value/amount).
-        # Strategy: Market Order (Fill IO) or Fetch Book first.
-        # For Alpha MVP: We ALERT. Auto-execution requires fetching current book to price limit.
-        
-        # Calculate size.
-        # my_size = min(amount * self.scale_factor, self.max_bet) 
-        # await self.executor.place_order(...) 
-        # IMPLEMENTATION DEFERRED pending user approval on auto-trade.
