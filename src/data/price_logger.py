@@ -5,8 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 try:
-    from influxdb_client import InfluxDBClient, Point, WritePrecision
-    from influxdb_client.client.write_api import SYNCHRONOUS
+    from influxdb_client import InfluxDBClient, Point, WritePrecision, WriteOptions
     INFLUX_AVAILABLE = True
 except ImportError:
     INFLUX_AVAILABLE = False
@@ -31,8 +30,19 @@ class PriceTickerLogger:
         if INFLUX_AVAILABLE and self.token:
             try:
                 self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
-                self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
-                logger.info(f"[InfluxDB] Connected to {self.url} bucket {self.bucket}")
+                # Use batching and background threads for Task 2
+                self.write_api = self.client.write_api(
+                    write_options=WriteOptions(
+                        batch_size=500,
+                        flush_interval=1000,
+                        jitter_interval=2000,
+                        retry_interval=5000,
+                        max_retries=5,
+                        max_retry_delay=30000,
+                        exponential_base=2
+                    )
+                )
+                logger.info(f"[InfluxDB] Connected to {self.url} (Async/Batch mode)")
             except Exception as e:
                 logger.error(f"[InfluxDB] Connection error: {e}")
         else:

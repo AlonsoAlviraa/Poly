@@ -90,8 +90,8 @@ class BetfairPrice:
     lay_size: float
     back_liquidity_top3: float = 0.0  # Sum of volume in top 3 levels
     lay_liquidity_top3: float = 0.0
-    last_traded: float
-    timestamp: datetime
+    last_traded: float = 0.0
+    timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
 class BetfairClient:
