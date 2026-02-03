@@ -59,20 +59,20 @@ class PolymarketStream(BaseStream):
         try:
             # Manual WSS Connection using websockets library
             import websockets
-            self._ws_url = "wss://clob.polymarket.com/ws/orderbook"
+            # Corrected endpoint for CLOB v4/v5 subscriptions
+            self._ws_url = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
             
             async with websockets.connect(self._ws_url) as ws:
                 self._ws_client = ws
                 self.is_running = True
                 
-                # Subscription message
-                for token_id in self.token_ids:
-                    sub_msg = {
-                        "type": "subscribe",
-                        "channel": "orderbook",
-                        "market_id": token_id
-                    }
-                    await ws.send(json.dumps(sub_msg))
+                # Subscription message (Corrected for Task 2)
+                sub_msg = {
+                    "type": "subscribe",
+                    "channel": "orderbook",
+                    "market_ids": self.token_ids
+                }
+                await ws.send(json.dumps(sub_msg))
                 
                 logger.info(f"[PolymarketStream] Connected and subscribed to {len(self.token_ids)} tokens")
                 
