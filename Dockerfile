@@ -1,22 +1,32 @@
-# Arbitrage Platform - Dockerfile
-FROM python:3.10-slim
+# Base Image: Python 3.12 Slim (Lightweight)
+FROM python:3.12-slim
 
+# Environment Variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Install System Dependencies
+# pulp requires CBC solver. We install coinor-cbc.
+RUN apt-get update && apt-get install -y \
+    coinor-cbc \
+    coinor-libcbc-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Workdir
 WORKDIR /app
 
-# Install dependencies
+# Install Python Deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
-# Copy application code
-COPY src/ ./src/
-COPY data/ ./data/
-COPY config.py .
-COPY main.py .
-COPY qa_sweep.py .
-COPY automated_bot.py .
+# Copy Code
+COPY . .
 
-# Create output directories
-RUN mkdir -p logs output
+# Expose Metrics Port
+EXPOSE 8000
 
-# Run the arbitrage scanner
-CMD ["python", "-u", "qa_sweep.py"]
+# Entrypoint
+CMD ["python", "main.py"]

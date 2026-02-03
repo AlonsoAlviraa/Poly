@@ -1,0 +1,8 @@
+web3
+eth-account
+py-clob-client
+aiohttp
+python-dotenv
+requests
+thefuzz
+python-Levenshtein

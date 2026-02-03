@@ -1,93 +1,362 @@
 import asyncio
-import csv
+import argparse
+import sys
 import os
-from datetime import datetime
-from src.collectors.bookmakers import BookmakerClient
-from src.collectors.polymarket import PolymarketClient
-from src.core.matcher import EventMatcher
-from src.core.analyzer import ArbitrageAnalyzer
-from src.utils.notifier import send_alert
+from dotenv import load_dotenv
 
-HISTORY_FILE = "opportunities_history.csv"
+# Load Env
+load_dotenv()
 
-def save_opportunity(opp):
-    file_exists = os.path.exists(HISTORY_FILE)
-    with open(HISTORY_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(["Timestamp", "Event", "Bookie Odds", "Poly Price", "Delta", "Liquidity", "Link"])
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Logging replaced by StructuredLogger where applicable
+from src.utils.structured_log import audit_logger 
+
+# Modules
+from src.math.polytope import MarginalPolytope
+from src.math.bregman import barrier_frank_wolfe_projection
+from src.execution.smart_router import SmartRouter
+from src.execution.clob_executor import PolymarketCLOBExecutor
+from src.data.graph_factory import GraphFactory
+from src.utils.metrics import MetricsServer
+from src.risk.circuit_breaker import CircuitBreaker
+from src.risk.position_sizer import KellyPositionSizer
+from src.observer_mode import ObserverMode
+
+import numpy as np
+
+class QuantArbitrageEngine:
+    def __init__(self, dry_run: bool = False):
+        self.dry_run = dry_run
         
-        writer.writerow([
-            datetime.now(),
-            opp['event'],
-            opp['bookie_odds'],
-            opp['poly_price'],
-            opp['delta'],
-            opp['liquidity'],
-            opp['poly_link']
-        ])
-
-async def process_match(match, poly_client, analyzer):
-    b_event, p_event = match
-    
-    # Extract Token ID (Home Win / Yes)
-    markets = p_event.get("markets", [])
-    if not markets:
-        return None
-    
-    market = markets[0]
-    clob_token_ids = market.get("clobTokenIds", [])
-    if not clob_token_ids:
-        return None
+        # 0. Data Factory
+        self.graph_factory = GraphFactory()
+        self.active_market_ids = []
+        self.polytope = None
         
-    token_id = clob_token_ids[0] # Assuming first token is "Yes" / Home
-    
-    # Fetch Depth
-    price, size, asks = await poly_client.get_orderbook_depth_async(token_id)
-    
-    # Analyze
-    opp = analyzer.calculate_arbitrage(b_event, p_event, asks)
-    return opp
+        # 1. Observability (Module 3)
+        self.metrics = MetricsServer(port=8000)
+        self.metrics.start()
+        
+        # 2. Risk Management (Module 4)
+        # Load Risk Config from Env or Defaults
+        initial_cap = float(os.getenv("INITIAL_CAPITAL", 1000.0))
+        self.breaker = CircuitBreaker(initial_capital=initial_cap)
+        self.kelly = KellyPositionSizer(fraction=0.25)
+        
+        # 3. Execution & Data
+        real_exec = os.getenv("REAL_ORDER_EXECUTION", "FALSE").upper() == "TRUE"
+        clob_host = os.getenv("CLOB_API_HOST", "https://clob.polymarket.com")
+        pk = os.getenv("PRIVATE_KEY", "dummy_key")
+        
+        # Validation Bypass for Dry Run logic with Real Data
+        if pk == "dummy_key":
+            # Use valid hex format (64 chars) to satisfy py_clob_client
+            pk = "0" * 64
+        
+        # Always init Real Client for Data (Read-Only)
+        try:
+            self.data_client = PolymarketCLOBExecutor(host=clob_host, key=pk)
+        except Exception as e:
+            self.data_client = None
+            audit_logger.warning("Could not init Real Data Client.", error=str(e))
 
-async def main():
-    print("Starting Statistical Arbitrage Platform (Sprint Refactor V2)...")
-    
-    # Init
-    bookie_client = BookmakerClient()
-    poly_client = PolymarketClient()
-    matcher = EventMatcher()
-    analyzer = ArbitrageAnalyzer()
+        if real_exec and not self.dry_run:
+            audit_logger.info("⚠️ INITIALIZING REAL EXECUTOR")
+            self.executor_client = self.data_client
+        else:
+            class MockExecutor:
+                def place_order(self, tid, side, price, size):
+                    import time; time.sleep(0.05) 
+                    return f"OID_{tid}_{int(time.time())}"
+                # Add mock balance
+                def get_balance(self): return 1000.0
+                
+            self.executor_client = MockExecutor()
+            audit_logger.info("Using MOCK Executor")
+        
+        # Load RPCs from Env
+        rpc_primary = os.getenv("POLYGON_RPC_URL", "https://polygon-rpc.com")
+        rpc_backup = os.getenv("BACKUP_RPC_URL", "https://rpc-mainnet.maticvigil.com")
+        rpc_urls = [rpc_primary, rpc_backup]
+        
+        # Risk: Min Profit to cover 3x Gas (approx $0.05 * 3 = $0.15)
+        min_profit_env = float(os.getenv("MIN_NET_PROFIT", 0.15))
+        
+        self.router = SmartRouter(self.executor_client, rpc_urls=rpc_urls, metrics_server=self.metrics, min_profit=min_profit_env)
+        
+        audit_logger.info("ENGINE_STARTUP", dry_run=self.dry_run, status="INITIALIZED", rpcs=len(rpc_urls), min_profit=min_profit_env, real_exec=real_exec)
 
-    # 1. Fetch Data Concurrently
-    print("Fetching data asynchronously...")
-    start_time = datetime.now()
-    
-    results = await asyncio.gather(
-        bookie_client.get_all_odds_async(),
-        poly_client.get_events_async()
-    )
-    bookie_events, poly_events = results
-    
-    print(f"Fetched {len(bookie_events)} Bookmaker events and {len(poly_events)} Polymarket events in {(datetime.now() - start_time).total_seconds():.2f}s.")
+    async def run(self):
+        audit_logger.info("LOOP_START", port=8000)
+        
+        while True:
+            try:
+                # RISK CHECK
+                if not self.breaker.can_trade():
+                    audit_logger.error("CIRCUIT_BREAKER_ACTIVE", reason=self.breaker.state['broken_reason'])
+                    await asyncio.sleep(60)
+                    continue
 
-    # 2. Match
-    print("Matching events...")
-    matches = matcher.match_events(bookie_events, poly_events)
-    print(f"Found {len(matches)} potential matches.")
+                # ... (Mock Cycle similar to previous) ...
+                # Use logging and metrics inside cycle.
+                await self._process_mock_cycle()
 
-    # 3. Analyze (Concurrent Depth Checks)
-    print("Analyzing matches...")
-    tasks = [process_match(m, poly_client, analyzer) for m in matches]
-    opportunities = await asyncio.gather(*tasks)
+                await asyncio.sleep(5)
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                audit_logger.error("CRITICAL_LOOP_ERROR", error=e)
+                self.metrics.fill_rate_counter.labels(status='failed').inc()
+                await asyncio.sleep(5)
     
-    # Filter None
-    opportunities = [o for o in opportunities if o]
-    
-    print(f"Analysis complete. Found {len(opportunities)} actionable opportunities.")
-    
-    for opp in opportunities:
-        save_opportunity(opp)
-        send_alert(opp)
+    async def _process_mock_cycle(self):
+        """
+        Executes one full cycle. 
+        Supports Real Data Injection if REAL_ORDER_EXECUTION is set.
+        """
+        
+        # --- SAFETY: HARD STOP & BALANCE SYNC ---
+        current_balance = self.breaker.state.get('current_balance', 21.0)
+        
+        # Try to sync real balance
+        if self.data_client and hasattr(self.data_client, 'get_balance'):
+            try:
+                real_bal = self.data_client.get_balance()
+                if real_bal is not None and real_bal > 0:
+                    current_balance = real_bal
+                    self.breaker.state['current_balance'] = real_bal
+            except Exception as e:
+                audit_logger.warning("BALANCE_SYNC_FAILED", error=str(e))
+        
+        # Hard Stop Check
+        if current_balance < 10.0:
+            audit_logger.critical("EMERGENCY_SHUTDOWN", 
+                                   reason="HARD_STOP_BALANCE_LOW", 
+                                   balance=current_balance,
+                                   action="HALT_AND_LIQUIDATE")
+            # Attempt emergency position close (if any open)
+            # In atomic arb, positions should be closed per trade. 
+            # This is a final safety net.
+            sys.exit(1)
+        
+        # 1. Data Layer: Real vs Mock
+        real_exec = os.getenv("REAL_ORDER_EXECUTION", "FALSE").upper() == "TRUE"
+        
+        # Use Real Data if available (Hybrid Mode support)
+        if self.data_client and real_exec:
+            # LIVE DATA FEED - Use SAMPLING markets (have orderbooks)
+            if not self.active_market_ids:
+                try:
+                    # KEY FIX: Use get_sampling_simplified_markets instead of get_markets
+                    # This returns markets that actually have orderbooks
+                    if hasattr(self.data_client.client, 'get_sampling_simplified_markets'):
+                         next_cursor = ""
+                         found = False
+                         for _ in range(10): # Sampling markets are fewer, 10 pages enough
+                             try:
+                                 resp = self.data_client.client.get_sampling_simplified_markets(next_cursor=next_cursor)
+                             except Exception as e:
+                                 audit_logger.warning("SAMPLING_MARKETS_ERROR", error=str(e))
+                                 break
+                             
+                             data = resp.get('data', []) if isinstance(resp, dict) else resp
+                             if not data: break
+
+                             for mkt in data:
+                                 # Sampling markets: check accepting_orders flag
+                                 if not mkt.get('accepting_orders', False): continue
+                                 if mkt.get('closed', False): continue
+                                 
+                                 tokens = mkt.get('tokens', [])
+                                 if len(tokens) >= 2:
+                                     self.active_market_ids = [t.get('token_id') for t in tokens[:2]]
+                                     
+                                     # Verify orderbook exists
+                                     try:
+                                         book = self.data_client.get_order_book(self.active_market_ids[0])
+                                         has_bids = len(book.bids if hasattr(book, 'bids') else book.get('bids', [])) > 0
+                                         has_asks = len(book.asks if hasattr(book, 'asks') else book.get('asks', [])) > 0
+                                         
+                                         if has_bids and has_asks:
+                                             audit_logger.info("MARKET_AUTO_CONFIG", 
+                                                 msg=f"Found market with orderbook: {mkt.get('condition_id', 'N/A')[:30]}",
+                                                 ids=self.active_market_ids,
+                                                 bids=has_bids, asks=has_asks)
+                                             constraints = [{'coeffs': [(0, 1), (1, 1)], 'sense': '=', 'rhs': 1}]
+                                             self.polytope = MarginalPolytope(2, constraints)
+                                             found = True
+                                             break
+                                         else:
+                                             self.active_market_ids = None
+                                     except Exception:
+                                         self.active_market_ids = None
+                                         continue
+                                         
+                             if found: break
+                             next_cursor = resp.get('next_cursor', '') if isinstance(resp, dict) else ''
+                             if not next_cursor or next_cursor == "LTE=": break
+                except Exception as e:
+                    audit_logger.error("MARKET_DISCOVERY_FAILED", error=str(e))
+
+            if not self.active_market_ids:
+                audit_logger.warning("NO_ACTIVE_MARKETS", msg="No Active Markets found for Live Feed.")
+                return
+
+            # Fetch Live Prices (Theta)
+            theta, ts = self.graph_factory.get_live_theta(self.data_client, self.active_market_ids)
+            
+            # --- 4. Filtering: Empty/Dead Books ---
+            if np.any(theta <= 0.0001):
+                audit_logger.warning("LOW_LIQUIDITY_SKIP", msg="One or more assets have 0 price (Empty Book).", prices=theta.tolist())
+                # If persistent, clear active_market_ids to find new one?
+                # self.active_market_ids = [] 
+                return
+
+            import time
+            if time.time() - ts > 0.5:
+                # logger.warning("⚠️ Market Data Stale (>500ms).")
+                pass 
+                
+            market_ids = self.active_market_ids
+            
+        else:
+            # MOCK DATA
+            market_ids = ["m_A", "m_B"]
+            theta = np.array([0.40, 0.40])
+            constraints = [{'coeffs': [(0, 1), (1, 1)], 'sense': '=', 'rhs': 1}]
+            if not self.polytope:
+                self.polytope = MarginalPolytope(n_conditions=len(theta), constraints=constraints)
+
+        # 2. Math Core (Detection)
+        if not self.polytope: return
+
+        if self.polytope.is_feasible(theta):
+            # Only return if feasible (no arb). 
+            # But wait, feasible means Theta is INSIDE polytope.
+            # If Theta is OUTSIDE, we have Arb.
+            # is_feasible checks Ax=b.
+            # If our constraint is Yes+No=1. And prices 0.4+0.4=0.8.
+            # 0.8 != 1. So it is NOT feasible.
+            # So is_feasible returns False.
+            # Code says: if is_feasible: return. (Correct, no arb).
+            return 
+            
+        audit_logger.info("ARBITRAGE_DETECTED", prices=theta.tolist(), real_data=bool(self.data_client))
+        self.metrics.arb_opportunities_gauge.inc()
+        
+        try:
+            mu_star = barrier_frank_wolfe_projection(theta, self.polytope)
+        except Exception as e:
+            audit_logger.error("MATH_SOLVER_FAILED", error=e)
+            return
+
+        # 3. Strategy Formulation & Inventory Management (Kelly)
+        diff = mu_star - theta
+        legs = []
+        est_gas_fee = 0.05 # From GasEstimator (simplified per leg)
+        
+        for i, change in enumerate(diff):
+            mid = market_ids[i]
+            if change <= 0.01: continue 
+            
+            # Kelly Inputs
+            price = theta[i]
+            target_price = mu_star[i] # Bregman Projection
+            b_odds = (1.0 - price) / price
+            liquidity = 1000.0 
+            
+            # Calculate Size
+            size = self.kelly.calculate_size(
+                capital=self.breaker.state['current_balance'],
+                win_prob=1.0,
+                profit_ratio=b_odds,
+                liquidity_limit=liquidity
+            )
+            
+            # --- 1. Gas-Aware Kelly Adjustment (Strict EV Check) ---
+            # EV_net = (P_win * Profit) - (P_loss * Loss) - Gas
+            # Profit = Size * (1.0 - Price)
+            # Loss = Size * Price (if we lose 100%)
+            
+            # For pure arb, P_win=1.0.
+            p_win = 1.0
+            p_loss = 0.0
+            gross_profit = size * (1.0 - price)
+            potential_loss = size * price
+            
+            ev_net = (p_win * gross_profit) - (p_loss * potential_loss) - est_gas_fee
+            
+            if ev_net <= 0:
+                 audit_logger.info("EV_NEGATIVE_GAS", ev=ev_net, size=size, msg="Skipping Leg: Gas eats Edge")
+                 continue
+            
+            # Track Drift (Target vs Execution Limit)
+            # In simulation limit = theta[i] (taking liquidity).
+            drift = abs(target_price - price)
+            self.metrics.arb_drift_gauge.set(drift)
+            
+            legs.append({
+                "token_id": mid,
+                "side": "BUY",
+                "size": size,
+                "limit_price": theta[i], 
+                "order_book": {"asks": [[theta[i], 1000]]}
+            })
+            
+        if not legs: 
+            return
+
+        # 4. Execution (Smart Router FSM)
+        # Assuming Payout=1.0 * Size (if balanced). 
+        # Simplified: Expected Payout = Sum(Size * 1.0) for the bundle?
+        # Only if we buy A and B.
+        
+        total_payout = sum(l['size'] for l in legs) # Approx if A+B=1
+        
+        result = await self.router.execute_strategy(legs, expected_payout=total_payout)
+        
+        # 5. Result Handling
+        if result['success']:
+            audit_logger.info("EXECUTION_SUCCESS", net_profit=result['net_profit_projected'])
+            self.metrics.pnl_gauge.inc(result['net_profit_projected'])
+            # Since fees were deducted from Net Profit calc, we can infer gross vs net or just track estimate
+            # est_gas_fee is per leg... or per strategy? In loop we defined est_gas_fee = 0.05
+            # We used est_gas_fee in Kelly check per leg.
+            # Total Gas = est_gas_fee * number of executed ON_CHAIN legs (assuming all buy).
+            # For this mock cycle we assumed gas check passed.
+            self.metrics.gas_spent_counter.inc(est_gas_fee)
+            
+            self.breaker.record_tx(success=True)
+            self.breaker.update_balance(self.breaker.state['current_balance'] + result['net_profit_projected'])
+        else:
+            if result.get('recovery_active'):
+                audit_logger.warning("RECOVERY_TRIGGERED", details=result)
+                # Breaker logic depends on final outcome of recovery, which is async/background?
+                # For now record as potential fail or wait.
+            else:
+                 audit_logger.warning("EXECUTION_FAILED", reason=result['reason'])
+                 # self.breaker.record_tx(success=False) # Only if technical failure, not gating.
+                 if "Gating" not in result['reason']:
+                     self.breaker.record_tx(success=False)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    
+    mode = os.getenv("MODE", "TRADING").upper()
+    
+    if mode == "OBSERVER":
+        observer = ObserverMode()
+        try:
+            asyncio.run(observer.start())
+        except KeyboardInterrupt:
+            pass
+    else:
+        engine = QuantArbitrageEngine(dry_run=args.dry_run)
+        try:
+            asyncio.run(engine.run())
+        except KeyboardInterrupt:
+            pass

@@ -1,0 +1,118 @@
+{
+  "timestamp": "2026-02-02T12:36:00Z",
+  "total_markets": 2379,
+  "tradeable": 2379,
+  "with_orderbooks": 10,
+  "markets": [
+    {
+      "token_id": "40038032174932089944326455754347610383156323563247452223458301854361022157497",
+      "condition_id": "0xdafaa73301e394d19a14c3f1b220d3e27eee7cc042fe4e694c102ba9292ec49e",
+      "bids": 33,
+      "asks": 22,
+      "best_bid": 0.01,
+      "best_ask": 0.99,
+      "spread": 0.98,
+      "price_yes": 0.73,
+      "price_no": 0.27
+    },
+    {
+      "token_id": "1046980875306043125128331871114794349002409233139736033870402475326170083426",
+      "condition_id": "0x3fd189cac9280dfc49a07115581e8d4c9e0b7e1c1e8580a44e9ff3d74e39cf2d",
+      "bids": 10,
+      "asks": 30,
+      "best_bid": 0.01,
+      "best_ask": 0.99,
+      "spread": 0.98,
+      "price_yes": 0.225,
+      "price_no": 0.775
+    },
+    {
+      "token_id": "68097178525239932220037003607350125596377562503394856685642853623033223850932",
+      "condition_id": "0x53f61250dc2d9c668ed934336234a76325d706f9fb50b43520bd435a46230b00",
+      "bids": 8,
+      "asks": 38,
+      "best_bid": 0.001,
+      "best_ask": 0.999,
+      "spread": 0.998,
+      "price_yes": 0.03,
+      "price_no": 0.97
+    },
+    {
+      "token_id": "60550692412996164477361673304744222976539035905940935096587343919192326604823",
+      "condition_id": "0x21bf9a7dae81b6bd51acae73185686ab8997b81b1401e4be10e114d472599c26",
+      "bids": 27,
+      "asks": 48,
+      "best_bid": 0.01,
+      "best_ask": 0.99,
+      "spread": 0.98,
+      "price_yes": 0.28,
+      "price_no": 0.72
+    },
+    {
+      "token_id": "94120399411978925018563650270691769293212315658863591054992105782706185155787",
+      "condition_id": "0x77399fdf6c5097661705ee1fcf8ad615721ea5dd695871dcae2c9eb192a3d75b",
+      "bids": 14,
+      "asks": 38,
+      "best_bid": 0.01,
+      "best_ask": 0.99,
+      "spread": 0.98,
+      "price_yes": 0.175,
+      "price_no": 0.825
+    },
+    {
+      "token_id": "108809908973403398411574504907651344991241121743995771751666629523110591927114",
+      "condition_id": "0x5e2f14d48587ba4b5bfc4f0da2e206bf81a6e6ff791f6264e8d7686842f5da7f",
+      "bids": 5,
+      "asks": 30,
+      "best_bid": 0.01,
+      "best_ask": 0.99,
+      "spread": 0.98,
+      "price_yes": 0.06,
+      "price_no": 0.94
+    },
+    {
+      "token_id": "76079112027472838335290455592014338879214017693395013229937591392536082897129",
+      "condition_id": "0x4b23c2e3ee806915cc1186641d292acbc6b26d7a7746ee93c910b8b0c87d4bca",
+      "bids": 35,
+      "asks": 11,
+      "best_bid": 0.01,
+      "best_ask": 0.99,
+      "spread": 0.98,
+      "price_yes": 0.885,
+      "price_no": 0.115
+    },
+    {
+      "token_id": "49084048476353771153083262278964615095037480324537117350127265918750912547378",
+      "condition_id": "0xb106a3c9d1c59ed8117493dae6459a3ff79369a8f7cddaf62f4a05828b89195e",
+      "bids": 31,
+      "asks": 32,
+      "best_bid": 0.01,
+      "best_ask": 0.99,
+      "spread": 0.98,
+      "price_yes": 0.535,
+      "price_no": 0.465
+    },
+    {
+      "token_id": "29938831077009077898322181578672720686130264330435698357670538459284325215474",
+      "condition_id": "0x62252825cd51befc797a9b505df07771eec0d6ee28644584154af75995bf3415",
+      "bids": 7,
+      "asks": 30,
+      "best_bid": 0.001,
+      "best_ask": 0.999,
+      "spread": 0.998,
+      "price_yes": 0.0395,
+      "price_no": 0.9605
+    },
+    {
+      "token_id": "115258259561547414610995893322363332894307320697384633557391293684664191320185",
+      "condition_id": "0x1b7fa10e6b102c964bbd4a7cb0a4b7a341e17fcb9f8a2c8a5d6a3b30dfb5c394",
+      "bids": 22,
+      "asks": 5,
+      "best_bid": 0.01,
+      "best_ask": 0.99,
+      "spread": 0.98,
+      "price_yes": 0.94,
+      "price_no": 0.06
+    }
+  ]
+}

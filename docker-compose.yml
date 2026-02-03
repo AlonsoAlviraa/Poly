@@ -1,13 +1,17 @@
 version: '3.8'
 
 services:
-  arbitrage_scanner:
+  quant-engine:
     build: .
-    container_name: arbitrage_scanner
-    env_file:
-      - .env
-    volumes:
-      - ./output:/app/output
-      - ./logs:/app/logs
+    image: quant-engine-v2
+    container_name: polymarket-bot
     restart: unless-stopped
-    command: python -u automated_bot.py
+    ports:
+      - "8000:8000"
+    volumes:
+      # PERSISTENCE: Mount risk directory to preserve breaker_state.json
+      - ./src/risk:/app/src/risk
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Add Private RPC keys here
+      # - POLYGON_RPC_URL=https://...

@@ -1,8 +1,28 @@
-web3
-eth-account
-py-clob-client
-aiohttp
-python-dotenv
-requests
-thefuzz
-python-Levenshtein
+# Optimization Core
+pulp>=2.7.0
+numpy>=1.24.0
+scipy>=1.10.0
+gurobipy>=10.0.0 # Optional, falls back to CBC in PuLP
+
+# Data & Networking
+websockets>=11.0
+httpx>=0.24.0
+pandas>=2.0.0
+
+# Protocol / Web3
+eth-account>=0.8.0
+web3>=6.0.0
+
+# Polymarket SDK
+py-clob-client>=0.18.0
+
+# AI / LLM Integration
+openai>=1.0.0
+chromadb>=0.4.0  # Optional: for semantic caching
+sentence-transformers>=2.2.0  # Optional: for local embeddings (Hacha Protocol)
+
+# Utils
+python-telegram-bot>=20.0
+python-dotenv>=1.0.0
+pytest>=7.0.0
+pytest-asyncio>=0.21.0

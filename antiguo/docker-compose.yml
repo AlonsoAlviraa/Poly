@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  arbitrage_scanner:
+    build: .
+    container_name: arbitrage_scanner
+    env_file:
+      - .env
+    volumes:
+      - ./output:/app/output
+      - ./logs:/app/logs
+    restart: unless-stopped
+    command: python -u automated_bot.py
