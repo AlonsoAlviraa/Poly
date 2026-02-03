@@ -1,5 +1,5 @@
 import logging
-import numpy as np
+from decimal import Decimal, InvalidOperation
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,20 @@ class KellyPositionSizer:
         Returns:
             Amount to wager (USD).
         """
-        if profit_ratio <= 0:
+        try:
+            capital_d = Decimal(str(capital))
+            win_prob_d = Decimal(str(win_prob))
+            profit_ratio_d = Decimal(str(profit_ratio))
+            liquidity_limit_d = Decimal(str(liquidity_limit))
+        except (InvalidOperation, ValueError):
+            logger.warning("Invalid input for Kelly sizing; returning 0.")
+            return 0.0
+
+        if win_prob_d <= 0 or win_prob_d >= 1:
+            logger.warning("win_prob out of bounds for Kelly sizing; returning 0.")
+            return 0.0
+
+        if profit_ratio_d <= 0:
             return 0.0
             
         # Kelly Formula
@@ -42,9 +55,9 @@ class KellyPositionSizer:
         # If p ~ 1.0, f ~ 1.0. We bet everything!
         # But we use fractional kelly for execution risk (smart contract bug, etc).
         
-        b = profit_ratio # Assuming trade returns (1+b) * stake.
-        p = win_prob
-        q = 1 - p
+        b = profit_ratio_d  # Assuming trade returns (1+b) * stake.
+        p = win_prob_d
+        q = Decimal("1") - p
         
         f_star = (b * p - q) / b
         
@@ -52,12 +65,12 @@ class KellyPositionSizer:
             return 0.0
             
         # Apply Fraction
-        safe_f = f_star * self.kelly_fraction
+        safe_f = f_star * Decimal(str(self.kelly_fraction))
         
         # Calculate Amount
-        wager = capital * safe_f
+        wager = capital_d * safe_f
         
         # Cap at Liquidity
-        final_size = min(wager, liquidity_limit)
-        
-        return final_size
+        final_size = min(wager, liquidity_limit_d)
+
+        return float(final_size)

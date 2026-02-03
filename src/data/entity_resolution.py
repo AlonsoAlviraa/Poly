@@ -33,6 +33,9 @@ class EntityResolver:
             "inter", "ac", "sporting", "racing", "cd", "sv", "manchester", 
             "milan", "madrid", "new york", "los angeles"
         }
+        self.PREFERRED_CANONICALS = {
+            "man city": "Manchester City"
+        }
         
         self._load_mappings()
         
@@ -88,7 +91,8 @@ class EntityResolver:
         
         # 1. Exact Lookup (O(1))
         if clean_name in self.canonical_map:
-            return self.canonical_map[clean_name]
+            canonical = self.canonical_map[clean_name]
+            return self.PREFERRED_CANONICALS.get(clean_name, canonical)
             
         if not FUZZY_AVAILABLE:
             return None
