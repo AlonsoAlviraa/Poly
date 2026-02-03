@@ -32,6 +32,7 @@ import sys
 import asyncio
 import argparse
 import logging
+import re
 from datetime import datetime
 from typing import List, Dict, Optional
 from dataclasses import dataclass
@@ -167,6 +168,76 @@ class DualArbitrageScanner:
             'llm_matches': 0,
             'keyword_matches': 0
         }
+
+    async def run_force_test(self):
+        """Run a forced test scenario to validate math without external APIs."""
+        logger.info("\n" + "=" * 60)
+        logger.info("FORCE TEST MODE: Injected scenarios (no external calls)")
+        logger.info("=" * 60)
+
+        scenarios = [
+            {
+                "poly_id": "force_poly_osasuna",
+                "poly_question": "Will Osasuna win?",
+                "poly_yes": 0.42,
+                "bf_odds": 2.70,
+                "category": "Sports",
+                "notes": "Forced Test: Match Odds"
+            },
+            {
+                "poly_id": "force_poly_over_25",
+                "poly_question": "Over 2.5 goals?",
+                "poly_yes": 0.78,
+                "bf_odds": 1.55,
+                "category": "Sports",
+                "notes": "Forced Test: Totals (Over/Under)"
+            }
+        ]
+
+        opportunities = []
+
+        for scenario in scenarios:
+            poly_question = scenario["poly_question"]
+            poly_yes = scenario["poly_yes"]
+            bf_odds = scenario["bf_odds"]
+            bf_implied_prob = 1.0 / bf_odds
+            spread_signed = (bf_implied_prob - poly_yes) * 100
+            spread_pct = abs(spread_signed)
+
+            trace = self.audit.get_event(scenario["poly_id"], poly_question)
+            trace.category = scenario.get("category", "unknown")
+            trace.add_step("ForceTest", "PASS", scenario["notes"])
+            trace.add_step(
+                "MathCalc",
+                "PASS" if spread_pct >= self.min_spread else "FAIL",
+                f"Spread Signed {spread_signed:+.2f}% | Spread Abs {spread_pct:.2f}% (Threshold {self.min_spread}%)"
+            )
+
+            logger.info(f"\n[MATH CHECK] {poly_question}")
+            logger.info(f"--- Polymarket (Yes): Price {poly_yes:.3f} (${1.0/poly_yes:.2f})")
+            logger.info(f"--- Betfair (BACK): Odds {bf_odds:.2f}")
+            logger.info(f"--- Spread Signed: {spread_signed:+.2f}% | Spread Abs: {spread_pct:.2f}%")
+
+            direction = "buy_poly_sell_bf" if poly_yes < bf_implied_prob else "buy_bf_sell_poly"
+            opp = ArbitrageOpportunity(
+                platform_a='polymarket',
+                platform_b='betfair',
+                market_a_id=scenario["poly_id"],
+                market_b_id="force_bf_market",
+                market_name=poly_question[:60],
+                category=scenario.get("category", "Sports"),
+                price_a=poly_yes,
+                price_b=bf_implied_prob,
+                spread_pct=spread_pct,
+                direction=direction,
+                is_profitable=spread_pct >= self.min_spread,
+                detected_at=datetime.now(),
+                notes=scenario["notes"]
+            )
+            opportunities.append(opp)
+
+        self.sports_opportunities = opportunities
+        self.stats['sports_opportunities'] = len(opportunities)
     
     async def init_betfair(self) -> bool:
         """Initialize Betfair client."""
@@ -256,24 +327,15 @@ class DualArbitrageScanner:
             req['runner_pattern'] = 'draw'
             return req
 
-        # Over/Under markets
-        if 'o/u' in q or 'over/under' in q:
-            if '2.5' in q:
-                req['market_types'] = ['OVER_UNDER_25']
-            elif '1.5' in q:
-                req['market_types'] = ['OVER_UNDER_15']
-            elif '3.5' in q:
-                req['market_types'] = ['OVER_UNDER_35']
-            elif '0.5' in q:
-                req['market_types'] = ['OVER_UNDER_05']
-            
-            # Target runner
-            if 'over' in q:
-                req['runner_pattern'] = 'over'
-            elif 'under' in q:
-                req['runner_pattern'] = 'under'
-            
-            if req['runner_pattern']: return req
+        # Over/Under markets (regex detection)
+        totals_match = re.search(r"(over|under)\s+(\d+(?:[.,]\d+)?)", q)
+        if totals_match:
+            direction = totals_match.group(1)
+            line_value = float(totals_match.group(2).replace(",", "."))
+            suffix = int(round(line_value * 10))
+            req['market_types'] = [f"OVER_UNDER_{suffix:02d}"]
+            req['runner_pattern'] = direction
+            return req
 
         # Both Teams to Score
         if 'both teams to score' in q or 'btts' in q:
@@ -469,27 +531,28 @@ class DualArbitrageScanner:
                             
                         best_back = target_price.back_price
                         logger.debug(f"[Arb] Matched: {poly_question[:20]}... YES={poly_yes:.3f} ↔ {bf_market.market_name} | {target_price.runner_name} Back={best_back}")
-                        
+
                         if best_back <= 1.0:
                             continue
-                        
+
                         bf_implied_prob = 1.0 / best_back
-                        spread = abs(poly_yes - bf_implied_prob)
-                        spread_pct = spread * 100
-                        
-                        if self.debug_math:
-                            logger.info(f"\n[MATH CHECK] {poly_question[:40]}")
-                            logger.info(f"--- Polymarket (Yes): Price {poly_yes:.3f} (${1.0/poly_yes:.2f})")
-                            logger.info(f"--- Betfair ({match.mapping.get('side', 'BACK') if match.mapping else 'BACK'}): Odds {best_back:.2f}")
-                            logger.info(f"--- Spread Calculado: {spread_pct:.2f}%")
-                            
-                        trace.add_step("MathCalc", 
-                                      "PASS" if spread_pct >= self.min_spread else "FAIL", 
-                                      f"Spread {spread_pct:.2f}% (Threshold {self.min_spread}%)")
-                        
+                        spread_signed = (bf_implied_prob - poly_yes) * 100
+                        spread_pct = abs(spread_signed)
+
+                        logger.info(f"\n[MATH CHECK] {poly_question[:60]}")
+                        logger.info(f"--- Polymarket (Yes): Price {poly_yes:.3f} (${1.0/poly_yes:.2f})")
+                        logger.info(f"--- Betfair ({match.mapping.get('side', 'BACK') if match.mapping else 'BACK'}): Odds {best_back:.2f}")
+                        logger.info(f"--- Spread Signed: {spread_signed:+.2f}% | Spread Abs: {spread_pct:.2f}%")
+
+                        trace.add_step(
+                            "MathCalc",
+                            "PASS" if spread_pct >= self.min_spread else "FAIL",
+                            f"Spread {spread_pct:.2f}% (Threshold {self.min_spread}%)"
+                        )
+
                         if spread_pct >= self.min_spread:
                             direction = "buy_poly_sell_bf" if poly_yes < bf_implied_prob else "buy_bf_sell_poly"
-                            
+
                             opp = ArbitrageOpportunity(
                                 platform_a='polymarket',
                                 platform_b='betfair',
@@ -505,14 +568,13 @@ class DualArbitrageScanner:
                                 detected_at=datetime.now(),
                                 notes=f"LLM Match ({match.source}): {match.betfair_event_name}, Conf: {match.confidence:.0%}"
                             )
-                            
+
                             opportunities.append(opp)
                             logger.info(f"\n🎯 OPPORTUNITY via {match.source.upper()}:")
                             logger.info(f"{opp}")
                             trace.final_status = "PASS"
                         else:
-                            if self.debug_math:
-                                logger.info(f"--- Status: REJECTED (Min profit not met)")
+                            logger.info("--- Status: REJECTED (Min profit not met)")
                             if spread_pct > 0.01:
                                 logger.debug(f"[Arb] Narrow spread ({spread_pct:.2f}%): {match.poly_question[:30]}... Poly={poly_yes:.3f} BF={bf_implied_prob:.3f} Odd={best_back:.2f}")
                             
@@ -566,8 +628,13 @@ class DualArbitrageScanner:
                             
                             bf_implied_prob = 1.0 / best_back
                             
-                            spread = abs(poly_yes - bf_implied_prob)
-                            spread_pct = spread * 100
+                            spread_signed = (bf_implied_prob - poly_yes) * 100
+                            spread_pct = abs(spread_signed)
+
+                            logger.info(f"\n[MATH CHECK] {poly_question[:60]}")
+                            logger.info(f"--- Polymarket (Yes): Price {poly_yes:.3f} (${1.0/poly_yes:.2f})")
+                            logger.info(f"--- Betfair (BACK): Odds {best_back:.2f}")
+                            logger.info(f"--- Spread Signed: {spread_signed:+.2f}% | Spread Abs: {spread_pct:.2f}%")
                             
                             if spread_pct >= self.min_spread:
                                 direction = "buy_poly_sell_bf" if poly_yes < bf_implied_prob else "buy_bf_sell_poly"
@@ -590,6 +657,8 @@ class DualArbitrageScanner:
                                 
                                 opportunities.append(opp)
                                 logger.info(f"\n{opp}")
+                            else:
+                                logger.info("--- Status: REJECTED (Min profit not met)")
         
         self.sports_opportunities = opportunities
         self.stats['sports_opportunities'] = len(opportunities)
@@ -836,6 +905,11 @@ async def main():
         help='Enable Mega Debugger (Full Traceability)'
     )
     parser.add_argument(
+        '--force-test',
+        action='store_true',
+        help='Inject forced test scenarios (skip external APIs)'
+    )
+    parser.add_argument(
         '--force-match',
         type=str,
         help='Force matching for a specific team name (ignores common filters)'
@@ -870,12 +944,15 @@ async def main():
     )
     
     try:
-        if args.mode == 'sports':
-            await scanner.scan_sports_arbitrage()
-        elif args.mode == 'politics':
-            await scanner.scan_politics_arbitrage()
+        if args.force_test:
+            await scanner.run_force_test()
         else:
-            await scanner.scan_all()
+            if args.mode == 'sports':
+                await scanner.scan_sports_arbitrage()
+            elif args.mode == 'politics':
+                await scanner.scan_politics_arbitrage()
+            else:
+                await scanner.scan_all()
         
         scanner.print_report()
         

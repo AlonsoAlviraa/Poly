@@ -1,5 +1,6 @@
 
 import logging
+import re
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 
@@ -26,6 +27,31 @@ class OutcomeMapper:
     def __init__(self):
         # Keywords that indicate a "Winner" market
         self.winner_indicators = ["win", "winner", "to beat", "victory", "champion"]
+        self.totals_pattern = re.compile(
+            r"(?P<direction>over|under)\s+(?P<line>\d+(?:[.,]\d+)?)",
+            re.IGNORECASE
+        )
+
+    def _parse_totals_market(self, poly_question: str, poly_outcome: str) -> Optional[Tuple[str, str]]:
+        """
+        Detect totals (Over/Under) markets and return (direction, line_str).
+        Direction is 'over' or 'under'. line_str normalized with '.' decimal.
+        """
+        q_lower = poly_question.lower()
+        match = self.totals_pattern.search(q_lower)
+
+        if not match:
+            outcome_match = self.totals_pattern.search(poly_outcome.lower())
+            if not outcome_match:
+                return None
+            match = outcome_match
+
+        direction = match.group("direction").lower()
+        line_str = match.group("line").replace(",", ".")
+        return direction, line_str
+
+    def _is_binary_outcome(self, poly_outcome: str) -> bool:
+        return poly_outcome.strip().lower() in {"yes", "no"}
         
     def map_outcome(self, 
                     poly_question: str, 
@@ -41,6 +67,22 @@ class OutcomeMapper:
         """
         q_lower = poly_question.lower()
         outcome_lower = poly_outcome.lower()
+
+        totals = self._parse_totals_market(poly_question, poly_outcome)
+        if totals:
+            direction, line_str = totals
+            if self._is_binary_outcome(poly_outcome):
+                selection = direction if outcome_lower == "yes" else ("under" if direction == "over" else "over")
+            else:
+                selection = direction
+            selection_title = f"{selection.title()} {line_str}"
+            return MarketMappingResult(
+                success=True,
+                side="BACK",
+                selection_name=selection_title,
+                market_type="OVER_UNDER",
+                explanation=f"Mapped totals market to BACK {selection_title}"
+            )
         
         # 1. Detect Intent: Match Winner
         is_winner_market = any(ind in q_lower for ind in self.winner_indicators)
@@ -66,8 +108,21 @@ class OutcomeMapper:
                     market_type="MATCH_ODDS",
                     explanation=f"Mapped 'No' to LAY {canonical_entity}"
                 )
+
+        # 2. 1X2 / Match Odds explicit outcome
+        if not self._is_binary_outcome(poly_outcome):
+            normalized_outcome = poly_outcome.strip()
+            if outcome_lower in {"draw", "tie"}:
+                normalized_outcome = "Draw"
+            return MarketMappingResult(
+                success=True,
+                side="BACK",
+                selection_name=normalized_outcome,
+                market_type="MATCH_ODDS",
+                explanation=f"Mapped outcome '{poly_outcome}' to BACK {normalized_outcome}"
+            )
         
-        # 2. Prevent False Mappings for unknown structures
+        # 3. Prevent False Mappings for unknown structures
         return MarketMappingResult(
             success=False,
             explanation=f"Unknown market intent for question: {poly_question}"
