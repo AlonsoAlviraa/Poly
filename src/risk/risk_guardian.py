@@ -1,4 +1,6 @@
+import json
 import logging
+import os
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Deque, Optional
@@ -23,7 +25,8 @@ class RiskGuardian:
         api_error_limit: int = 10,
         api_error_window_s: int = 60,
         notifier: Optional[object] = None,
-        kill_on_drawdown: bool = False
+        kill_on_drawdown: bool = False,
+        state_file: str = "risk_guardian_state.json"
     ):
         self.initial_balance = initial_balance
         self.max_drawdown_pct = max_drawdown_pct
@@ -33,14 +36,17 @@ class RiskGuardian:
         self.api_error_window_s = api_error_window_s
         self.notifier = notifier
         self.kill_on_drawdown = kill_on_drawdown
+        self.state_file = state_file
 
         self.current_balance = initial_balance
         self.consecutive_losers = 0
         self.pause_until: Optional[datetime] = None
         self.api_errors: Deque[datetime] = deque()
+        self._load_state()
 
     def update_balance(self, balance: float) -> None:
         self.current_balance = balance
+        self._save_state()
 
     def record_trade(self, pnl: float) -> None:
         self.current_balance += pnl
@@ -50,11 +56,13 @@ class RiskGuardian:
             self.consecutive_losers = 0
         self._check_drawdown()
         self._check_consecutive_losses()
+        self._save_state()
 
     def record_api_error(self) -> None:
         now = datetime.now(timezone.utc)
         self.api_errors.append(now)
         self._trim_api_errors(now)
+        self._save_state()
 
     def can_trade(self) -> bool:
         now = datetime.now(timezone.utc)
@@ -97,3 +105,33 @@ class RiskGuardian:
     def _trim_api_errors(self, now: datetime) -> None:
         while self.api_errors and (now - self.api_errors[0]).total_seconds() > self.api_error_window_s:
             self.api_errors.popleft()
+
+    def _load_state(self) -> None:
+        if not os.path.exists(self.state_file):
+            return
+        try:
+            with open(self.state_file, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            self.current_balance = data.get("current_balance", self.current_balance)
+            self.consecutive_losers = data.get("consecutive_losers", self.consecutive_losers)
+            pause_until = data.get("pause_until")
+            if pause_until:
+                self.pause_until = datetime.fromisoformat(pause_until)
+            self.api_errors = deque(
+                datetime.fromisoformat(ts) for ts in data.get("api_errors", [])
+            )
+        except (json.JSONDecodeError, OSError, ValueError):
+            logger.warning("Failed to load RiskGuardian state; starting fresh.")
+
+    def _save_state(self) -> None:
+        data = {
+            "current_balance": self.current_balance,
+            "consecutive_losers": self.consecutive_losers,
+            "pause_until": self.pause_until.isoformat() if self.pause_until else None,
+            "api_errors": [ts.isoformat() for ts in self.api_errors]
+        }
+        try:
+            with open(self.state_file, "w", encoding="utf-8") as handle:
+                json.dump(data, handle)
+        except OSError:
+            logger.warning("Failed to persist RiskGuardian state.")

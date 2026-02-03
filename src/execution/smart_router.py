@@ -1,6 +1,7 @@
 import asyncio
 import time
 import logging
+from decimal import Decimal, InvalidOperation
 from typing import List, Dict, Any, Optional, Tuple
 
 from src.execution.vwap_engine import VWAPEngine
@@ -49,6 +50,7 @@ class SmartRouter:
         self.paper_mode = paper_mode
         self.paper_engine = PaperExecutionEngine() if paper_mode else None
         self.risk_guardian = risk_guardian
+        self._order_lock = asyncio.Lock()
         
         # execution subsystems
         self.rpc_racer = RPCRacer(rpc_urls) if rpc_urls else None
@@ -96,6 +98,10 @@ class SmartRouter:
         return None
 
     async def _cancel_leg(self, leg: Dict) -> bool:
+        async with self._order_lock:
+            return await self._cancel_leg_unlocked(leg)
+
+    async def _cancel_leg_unlocked(self, leg: Dict) -> bool:
         cancel_fn = getattr(self.executor, "cancel_order", None)
         if not cancel_fn:
             return False
@@ -223,17 +229,17 @@ class SmartRouter:
         if self.risk_guardian and not self.risk_guardian.can_trade():
             return {"success": False, "reason": "RiskGuardian blocked trading"}
 
-        total_cost_vwap = 0.0
+        total_cost_vwap = Decimal("0")
         
         # 0. Gas Estimation (if any on-chain legs)
         has_chain_legs = any(l.get('type') == 'ON_CHAIN' for l in strategy_legs)
-        chain_fees = 0.0
+        chain_fees = Decimal("0")
         
         if has_chain_legs:
             gas_params = await self.gas_estimator.get_optimal_gas()
             # Estimate fee: $0.05 per tx simplified
-            chain_fees = 0.05 * sum(1 for l in strategy_legs if l.get('type')=='ON_CHAIN')
-            logger.debug(f"Estimated Chain Fees: ${chain_fees}")
+            chain_fees = Decimal("0.05") * Decimal(str(sum(1 for l in strategy_legs if l.get('type')=='ON_CHAIN')))
+            logger.debug(f"Estimated Chain Fees: ${float(chain_fees):.4f}")
 
         # 0. Kelly sizing (optional)
         strategy_legs, kelly_size = self._apply_kelly_sizing(
@@ -254,39 +260,44 @@ class SmartRouter:
             book = leg.get('order_book')
             size = leg['size']
             
-            vwap_price = 0.0
+            vwap_price = Decimal("0")
             if not book:
                 if leg.get('type') == 'ON_CHAIN' and side == 'MINT':
-                    vwap_price = 1.0 
+                    vwap_price = Decimal("1")
                 else:
-                    vwap_price = leg['limit_price']
+                    vwap_price = Decimal(str(leg['limit_price']))
             else:
                 if side == 'BUY':
-                    vwap_price = VWAPEngine.calculate_buy_vwap(book['asks'], size)
+                    vwap_price = Decimal(str(VWAPEngine.calculate_buy_vwap(book['asks'], size)))
                 else:
-                    vwap_price = VWAPEngine.calculate_sell_vwap(book['bids'], size)
+                    vwap_price = Decimal(str(VWAPEngine.calculate_sell_vwap(book['bids'], size)))
                     
             if vwap_price is None:
                 return {"success": False, "reason": f"Insufficient liquidity for leg {leg['token_id']}"}
                 
+            size_d = Decimal(str(size))
             if side == 'BUY' or (leg.get('type')=='ON_CHAIN' and side=='MINT'):
-                total_cost_vwap += (vwap_price * size)
+                total_cost_vwap += (vwap_price * size_d)
             else:
-                total_cost_vwap -= (vwap_price * size)
+                total_cost_vwap -= (vwap_price * size_d)
 
         # Net Profit Check
-        clob_fees = 0.0 
-        net_profit = expected_payout - total_cost_vwap - chain_fees - clob_fees
+        clob_fees = Decimal("0")
+        try:
+            expected_payout_d = Decimal(str(expected_payout))
+        except (InvalidOperation, ValueError):
+            expected_payout_d = Decimal("0")
+        net_profit = expected_payout_d - total_cost_vwap - chain_fees - clob_fees
         
-        if net_profit < self.min_net_profit:
-             logger.info(f"Gating: Profit ${net_profit:.4f} < ${self.min_net_profit}. Aborted.")
+        if net_profit < Decimal(str(self.min_net_profit)):
+             logger.info(f"Gating: Profit ${float(net_profit):.4f} < ${self.min_net_profit}. Aborted.")
              return {
                  "success": False, 
-                 "reason": f"Profit Gating Failed. Net: ${net_profit:.3f} < ${self.min_net_profit}"
+                 "reason": f"Profit Gating Failed. Net: ${float(net_profit):.3f} < ${self.min_net_profit}"
              }
              
         # 2. Parallel Execution (The "Hands")
-        logger.info(f"⚡ Executing Strategy. Net Projected: ${net_profit:.3f}")
+        logger.info(f"⚡ Executing Strategy. Net Projected: ${float(net_profit):.3f}")
         start_time = time.time()
         
         tasks = [self._place_order_task(leg) for leg in strategy_legs]
@@ -311,12 +322,12 @@ class SmartRouter:
                 
         # 4. Resolution (FSM Logic)
         if len(failed_legs) == 0:
-            self.notifier.send_trade(f"Ejecución Exitosa: +${net_profit:.2f} Profit")
+            self.notifier.send_trade(f"Ejecución Exitosa: +${float(net_profit):.2f} Profit")
             if self.risk_guardian:
-                self.risk_guardian.record_trade(net_profit)
+                self.risk_guardian.record_trade(float(net_profit))
             return {
                 "success": True,
-                "net_profit_projected": net_profit,
+                "net_profit_projected": float(net_profit),
                 "latency": duration,
                 "reason": "Full Execution",
                 "order_ids": [l.get('order_id') for l in strategy_legs]
@@ -324,7 +335,7 @@ class SmartRouter:
         elif len(successful_legs) == 0:
             self.notifier.send_alert("Error Crítico: Fallo total en ejecución (todas las legs)")
             if self.risk_guardian:
-                self.risk_guardian.record_trade(-abs(net_profit))
+                self.risk_guardian.record_trade(-abs(float(net_profit)))
             return {
                 "success": False,
                 "reason": "All Legs Failed"
@@ -334,7 +345,7 @@ class SmartRouter:
             logger.warning(f"⚠️ PARTIAL FILL. Success: {len(successful_legs)}, Failed: {len(failed_legs)}. Triggering RecoveryHandler.")
             self.notifier.send_alert("Error Crítico: Ejecución parcial, activando recovery.")
             if self.risk_guardian:
-                self.risk_guardian.record_trade(-abs(net_profit))
+                self.risk_guardian.record_trade(-abs(float(net_profit)))
             
             if self.metrics:
                 self.metrics.recovery_counter.inc()
@@ -402,7 +413,8 @@ class SmartRouter:
                     continue
 
             if isinstance(result, dict) and result.get("status") == "partial":
-                chased, chase_result = await self._chase_partial_fill(leg, result)
+                async with self._order_lock:
+                    chased, chase_result = await self._chase_partial_fill(leg, result)
                 if chased and chase_result:
                     successful_legs.append(leg)
                 else:

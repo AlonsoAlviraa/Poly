@@ -38,7 +38,11 @@ class OutcomeMapper:
         Direction is 'over' or 'under'. line_str normalized with '.' decimal.
         """
         q_lower = poly_question.lower()
-        match = self.totals_pattern.search(q_lower)
+        try:
+            match = self.totals_pattern.search(q_lower)
+        except re.error as exc:
+            logger.warning(f"Totals regex failed: {exc}")
+            return None
 
         if not match:
             outcome_match = self.totals_pattern.search(poly_outcome.lower())

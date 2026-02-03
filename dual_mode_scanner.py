@@ -33,6 +33,7 @@ import asyncio
 import argparse
 import logging
 import re
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from typing import List, Dict, Optional
 from dataclasses import dataclass
@@ -66,8 +67,6 @@ from src.arbitrage.sports_matcher import SportsMarketMatcher, SportsMatch
 from src.data.dual_lane_resolver import SlowLaneWorker
 from src.utils.audit_logger import AuditLogger
 from src.ui import TerminalDashboard
-from src.data.wss_manager import PolyWSSManager, BetfairStreamManager
-from src.data.price_logger import ticker_logger
 
 
 @dataclass
@@ -117,7 +116,6 @@ class DualArbitrageScanner:
                  use_llm: bool = False,
                  skip_prefilter: bool = False,
                  debug_math: bool = False,
-                 min_liquidity_depth: float = 500.0,
                  force_match_team: Optional[str] = None,
                  poly_fee_pct: float = 0.5,
                  betfair_commission_pct: float = 6.5,
@@ -138,7 +136,6 @@ class DualArbitrageScanner:
         self.use_llm = use_llm
         self.skip_prefilter = skip_prefilter
         self.debug_math = debug_math
-        self.min_liquidity_depth = min_liquidity_depth
         self.force_match_team = force_match_team
         self.poly_fee_pct = poly_fee_pct
         self.betfair_commission_pct = betfair_commission_pct
@@ -195,18 +192,24 @@ class DualArbitrageScanner:
             'sports_opportunities': 0,
             'politics_opportunities': 0,
             'llm_matches': 0,
-            'keyword_matches': 0,
-            'liq_gatekeeper_blocks': 0
+            'keyword_matches': 0
         }
 
-    def _apply_fee_stripping(self, spread_signed_pct: float) -> Dict[str, float]:
-        total_fees_pct = (
-            self.poly_fee_pct
-            + self.betfair_commission_pct
-            + self.gas_fee_pct
-            + self.slippage_pct
-        )
-        net_signed = spread_signed_pct - total_fees_pct
+    def _apply_fee_stripping(self, spread_signed_pct: float) -> Dict[str, Decimal]:
+        try:
+            spread_signed = Decimal(str(spread_signed_pct))
+            total_fees_pct = (
+                Decimal(str(self.poly_fee_pct))
+                + Decimal(str(self.betfair_commission_pct))
+                + Decimal(str(self.gas_fee_pct))
+                + Decimal(str(self.slippage_pct))
+            )
+        except (InvalidOperation, ValueError):
+            logger.warning("Invalid fee inputs; defaulting to zero fees.")
+            spread_signed = Decimal(str(spread_signed_pct))
+            total_fees_pct = Decimal("0")
+
+        net_signed = spread_signed - total_fees_pct
         net_abs = abs(net_signed)
         return {
             "total_fees_pct": total_fees_pct,
@@ -219,109 +222,6 @@ class DualArbitrageScanner:
         self.recent_events = self.recent_events[-5:]
         if self.dashboard:
             self.dashboard.update_events(self.recent_events)
-
-    def _check_liquidity_gatekeeper(self, platform: str, market_id: str, side: str, price_obj: Optional[Any] = None) -> bool:
-        """
-        Enforce Liquidity Gatekeeper: At least $500 in top 3 levels.
-        side: 'BUY' or 'SELL' from OUR perspective.
-        """
-        try:
-            liquidity = 0.0
-            
-            if platform == 'polymarket' and self.clob:
-                # For Poly, we use the CLOB executor to get the book
-                book = self.clob.get_order_book(market_id)
-                # If we BUY, we hit the ASKS. If we SELL, we hit the BIDS.
-                levels = book.get('asks' if side == 'BUY' else 'bids', [])
-                
-                for i, level in enumerate(levels[:3]):
-                    # volume = price * size
-                    p = float(level.get('price', 0))
-                    s = float(level.get('size', 0))
-                    liquidity += p * s
-                    
-            elif platform == 'betfair' and price_obj:
-                # For Betfair, we already have depth in the price_obj
-                # If we BUY, we need BACK liquidity. If we SELL (LAY), we need LAY liquidity.
-                if side == 'BUY':
-                    liquidity = price_obj.back_liquidity_top3
-                else:
-                    liquidity = price_obj.lay_liquidity_top3
-            
-            is_ok = liquidity >= self.min_liquidity_depth
-            if not is_ok:
-                logger.debug(f"[Gatekeeper] REJECTED {platform} {market_id}: ${liquidity:.2f} < ${self.min_liquidity_depth:.2f}")
-            return is_ok
-            
-        except Exception as e:
-            logger.error(f"Error in gatekeeper check: {e}")
-            return False
-
-    async def _on_wss_update(self, platform: str, data: Dict):
-        """Unified callback for WSS updates."""
-        # logger.debug(f"[WSS] Update from {platform}")
-        
-        # 1. Log to InfluxDB (The Black Box)
-        if platform == "polymarket":
-            # Example message format check needed, but typically has price/size
-            # For brevity, we assume standard clob update
-            ticker_logger.log_tick(
-                platform=platform,
-                market_id=data.get("market"),
-                price=data.get("price", 0),
-                size=data.get("size", 0),
-                side=data.get("side", "unknown")
-            )
-        elif platform == "betfair":
-            # Betfair mcm format parsing
-            for cm in data.get("mc", []):
-                mid = cm.get("id")
-                for rc in cm.get("rc", []):
-                    # Runner change
-                    for selection_id, prices in rc.get("atb", {}).items():
-                        # Available to Back
-                        ticker_logger.log_tick(
-                            platform=platform,
-                            market_id=mid,
-                            price=prices[0] if prices else 0,
-                            size=0, # size not always in same field
-                            side="BACK",
-                            runner_name=str(selection_id)
-                        )
-        
-        # 2. Trigger re-scan of the affected market (Codex)
-        pass
-
-    async def start_streaming(self, mode: str = 'sports'):
-        """Start real-time streaming mode."""
-        logger.info(f"🚀 Starting Real-Time Streaming Mode ({mode})...")
-        
-        if mode in ['sports', 'both']:
-            # Discovery first to get tokens
-            poly_sports = await self.get_polymarket_sports()
-            token_ids = []
-            for m in poly_sports:
-                tid = m.get('conditionId') or m.get('condition_id') or m.get('id')
-                if tid: token_ids.append(tid)
-            
-            # 1. Start Polymarket WSS
-            self.poly_wss = PolyWSSManager(token_ids[:50], self._on_wss_update) # Limit for stability
-            await self.poly_wss.connect()
-            
-            # 2. Start Betfair Stream (requires session)
-            if self.betfair and self.betfair.is_authenticated:
-                # We'd need market IDs here, typically found during matching
-                # For demo, we just connect. Real sub happens after first match.
-                self.bf_wss = BetfairStreamManager(
-                    self.betfair._session.ssoid, 
-                    self.betfair.app_key, 
-                    self._on_wss_update
-                )
-                await self.bf_wss.connect()
-        
-        logger.info("📡 Streaming active. Waiting for push events...")
-        while True:
-            await asyncio.sleep(1)
 
     async def run_force_test(self):
         """Run a forced test scenario to validate math without external APIs."""
@@ -360,17 +260,18 @@ class DualArbitrageScanner:
             fee_strip = self._apply_fee_stripping(spread_signed)
             net_signed = fee_strip["net_signed"]
             net_spread_pct = fee_strip["net_abs"]
+            threshold = Decimal(str(self.min_spread))
 
             trace = self.audit.get_event(scenario["poly_id"], poly_question)
             trace.category = scenario.get("category", "unknown")
             trace.add_step("ForceTest", "PASS", scenario["notes"])
             trace.add_step(
                 "MathCalc",
-                "PASS" if net_spread_pct >= self.min_spread else "FAIL",
+                "PASS" if net_spread_pct >= threshold else "FAIL",
                 " | ".join([
                     f"Gross {spread_signed:+.2f}% (Abs {spread_pct:.2f}%)",
-                    f"Net {net_signed:+.2f}% (Abs {net_spread_pct:.2f}%)",
-                    f"Fees {fee_strip['total_fees_pct']:.2f}% | Threshold {self.min_spread:.2f}%"
+                    f"Net {float(net_signed):+.2f}% (Abs {float(net_spread_pct):.2f}%)",
+                    f"Fees {float(fee_strip['total_fees_pct']):.2f}% | Threshold {self.min_spread:.2f}%"
                 ])
             )
 
@@ -379,10 +280,10 @@ class DualArbitrageScanner:
             logger.info(f"--- Betfair (BACK): Odds {bf_odds:.2f}")
             logger.info(f"--- Spread Gross: {spread_signed:+.2f}% | Abs: {spread_pct:.2f}%")
             logger.info(
-                f"--- Spread Net: {net_signed:+.2f}% | Abs: {net_spread_pct:.2f}% "
-                f"(Fees {fee_strip['total_fees_pct']:.2f}%)"
+                f"--- Spread Net: {float(net_signed):+.2f}% | Abs: {float(net_spread_pct):.2f}% "
+                f"(Fees {float(fee_strip['total_fees_pct']):.2f}%)"
             )
-            self._record_event(f"{poly_question[:32]} | Net {net_signed:+.2f}%")
+            self._record_event(f"{poly_question[:32]} | Net {float(net_signed):+.2f}%")
 
             direction = "buy_poly_sell_bf" if poly_yes < bf_implied_prob else "buy_bf_sell_poly"
             opp = ArbitrageOpportunity(
@@ -395,14 +296,14 @@ class DualArbitrageScanner:
                 price_a=poly_yes,
                 price_b=bf_implied_prob,
                 spread_pct=spread_pct,
-                net_spread_pct=net_spread_pct,
+                net_spread_pct=float(net_spread_pct),
                 direction=direction,
-                is_profitable=net_spread_pct >= self.min_spread,
+                is_profitable=net_spread_pct >= threshold,
                 detected_at=datetime.now(),
                 notes=scenario["notes"]
             )
             opportunities.append(opp)
-            self._record_event(f"FORCE OPPORTUNITY {poly_question[:24]} | Net {net_spread_pct:.2f}%")
+            self._record_event(f"FORCE OPPORTUNITY {poly_question[:24]} | Net {float(net_spread_pct):.2f}%")
 
         self.sports_opportunities = opportunities
         self.stats['sports_opportunities'] = len(opportunities)
@@ -709,27 +610,29 @@ class DualArbitrageScanner:
                         fee_strip = self._apply_fee_stripping(spread_signed)
                         net_signed = fee_strip["net_signed"]
                         net_spread_pct = fee_strip["net_abs"]
+                        threshold = Decimal(str(self.min_spread))
+                        threshold = Decimal(str(self.min_spread))
 
                         logger.info(f"\n[MATH CHECK] {poly_question[:60]}")
                         logger.info(f"--- Polymarket (Yes): Price {poly_yes:.3f} (${1.0/poly_yes:.2f})")
                         logger.info(f"--- Betfair ({match.mapping.get('side', 'BACK') if match.mapping else 'BACK'}): Odds {best_back:.2f}")
                         logger.info(f"--- Spread Gross: {spread_signed:+.2f}% | Abs: {spread_pct:.2f}%")
                         logger.info(
-                            f"--- Spread Net: {net_signed:+.2f}% | Abs: {net_spread_pct:.2f}% "
-                            f"(Fees {fee_strip['total_fees_pct']:.2f}%)"
+                            f"--- Spread Net: {float(net_signed):+.2f}% | Abs: {float(net_spread_pct):.2f}% "
+                            f"(Fees {float(fee_strip['total_fees_pct']):.2f}%)"
                         )
 
                         trace.add_step(
                             "MathCalc",
-                            "PASS" if net_spread_pct >= self.min_spread else "FAIL",
+                            "PASS" if net_spread_pct >= threshold else "FAIL",
                             " | ".join([
                                 f"Gross {spread_signed:+.2f}% (Abs {spread_pct:.2f}%)",
-                                f"Net {net_signed:+.2f}% (Abs {net_spread_pct:.2f}%)",
-                                f"Fees {fee_strip['total_fees_pct']:.2f}% | Threshold {self.min_spread:.2f}%"
+                                f"Net {float(net_signed):+.2f}% (Abs {float(net_spread_pct):.2f}%)",
+                                f"Fees {float(fee_strip['total_fees_pct']):.2f}% | Threshold {self.min_spread:.2f}%"
                             ])
                         )
 
-                        if net_spread_pct >= self.min_spread:
+                        if net_spread_pct >= threshold:
                             direction = "buy_poly_sell_bf" if poly_yes < bf_implied_prob else "buy_bf_sell_poly"
 
                             opp = ArbitrageOpportunity(
@@ -742,40 +645,23 @@ class DualArbitrageScanner:
                                 price_a=poly_yes,
                                 price_b=bf_implied_prob,
                                 spread_pct=spread_pct,
-                                net_spread_pct=net_spread_pct,
+                                net_spread_pct=float(net_spread_pct),
                                 direction=direction,
-                                is_profitable=net_spread_pct >= self.min_spread,
+                                is_profitable=net_spread_pct >= threshold,
                                 detected_at=datetime.now(),
                                 notes=f"LLM Match ({match.source}): {match.betfair_event_name}, Conf: {match.confidence:.0%}"
                             )
 
-                            # --- LIQUIDITY GATEKEEPER ---
-                            # Check BOTH sides of the trade
-                            # Direction: buy_poly_sell_bf OR buy_bf_sell_poly
-                            poly_side = 'BUY' if opp.direction == 'buy_poly_sell_bf' else 'SELL'
-                            bf_side = 'SELL' if opp.direction == 'buy_poly_sell_bf' else 'BUY'
-                            
-                            logger.info(f"--- [Gatekeeper] Checking depth: Poly {poly_side} | BF {bf_side}")
-                            
-                            poly_ok = self._check_liquidity_gatekeeper('polymarket', match.poly_id, poly_side)
-                            bf_ok = self._check_liquidity_gatekeeper('betfair', bf_market.market_id, bf_side, target_price)
-                            
-                            if poly_ok and bf_ok:
-                                opportunities.append(opp)
-                                logger.info(f"\n🎯 OPPORTUNITY via {match.source.upper()}:")
-                                logger.info(f"{opp}")
-                                self._record_event(f"OPP {match.poly_question[:24]} | Net {net_spread_pct:.2f}%")
-                                trace.final_status = "PASS"
-                            else:
-                                self.stats['liq_gatekeeper_blocks'] += 1
-                                logger.warning(f"--- [Gatekeeper] REJECTED: Insufficient depth (Poly: {poly_ok}, BF: {bf_ok})")
-                                trace.add_step("LiquidityGate", "FAIL", f"Depth check failed: Poly={poly_ok}, BF={bf_ok}")
-                                trace.final_status = "FAIL"
+                            opportunities.append(opp)
+                            logger.info(f"\n🎯 OPPORTUNITY via {match.source.upper()}:")
+                            logger.info(f"{opp}")
+                            self._record_event(f"OPP {match.poly_question[:24]} | Net {float(net_spread_pct):.2f}%")
+                            trace.final_status = "PASS"
                         else:
                             logger.info("--- Status: REJECTED (Min profit not met)")
-                            if net_spread_pct > 0.01:
+                            if net_spread_pct > Decimal("0.01"):
                                 logger.debug(
-                                    f"[Arb] Narrow net spread ({net_spread_pct:.2f}%): "
+                                    f"[Arb] Narrow net spread ({float(net_spread_pct):.2f}%): "
                                     f"{match.poly_question[:30]}... Poly={poly_yes:.3f} BF={bf_implied_prob:.3f} Odd={best_back:.2f}"
                                 )
                             
@@ -834,17 +720,18 @@ class DualArbitrageScanner:
                             fee_strip = self._apply_fee_stripping(spread_signed)
                             net_signed = fee_strip["net_signed"]
                             net_spread_pct = fee_strip["net_abs"]
+                            threshold = Decimal(str(self.min_spread))
 
                             logger.info(f"\n[MATH CHECK] {poly_question[:60]}")
                             logger.info(f"--- Polymarket (Yes): Price {poly_yes:.3f} (${1.0/poly_yes:.2f})")
                             logger.info(f"--- Betfair (BACK): Odds {best_back:.2f}")
                             logger.info(f"--- Spread Gross: {spread_signed:+.2f}% | Abs: {spread_pct:.2f}%")
                             logger.info(
-                                f"--- Spread Net: {net_signed:+.2f}% | Abs: {net_spread_pct:.2f}% "
-                                f"(Fees {fee_strip['total_fees_pct']:.2f}%)"
+                                f"--- Spread Net: {float(net_signed):+.2f}% | Abs: {float(net_spread_pct):.2f}% "
+                                f"(Fees {float(fee_strip['total_fees_pct']):.2f}%)"
                             )
                             
-                            if net_spread_pct >= self.min_spread:
+                            if net_spread_pct >= threshold:
                                 direction = "buy_poly_sell_bf" if poly_yes < bf_implied_prob else "buy_bf_sell_poly"
                                 
                                 opp = ArbitrageOpportunity(
@@ -857,16 +744,16 @@ class DualArbitrageScanner:
                                     price_a=poly_yes,
                                     price_b=bf_implied_prob,
                                     spread_pct=spread_pct,
-                                    net_spread_pct=net_spread_pct,
+                                    net_spread_pct=float(net_spread_pct),
                                     direction=direction,
-                                    is_profitable=net_spread_pct >= self.min_spread,
+                                    is_profitable=net_spread_pct >= threshold,
                                     detected_at=datetime.now(),
                                     notes=f"Keyword match: {common}, BF Odds: {best_back:.2f}"
                                 )
                                 
                                 opportunities.append(opp)
                                 logger.info(f"\n{opp}")
-                                self._record_event(f"OPP {poly_question[:24]} | Net {net_spread_pct:.2f}%")
+                                self._record_event(f"OPP {poly_question[:24]} | Net {float(net_spread_pct):.2f}%")
                             else:
                                 logger.info("--- Status: REJECTED (Min profit not met)")
         
@@ -946,11 +833,11 @@ class DualArbitrageScanner:
                         logger.info(f"--- SX Bet (Bid): {sx_bid:.3f}")
                         logger.info(f"--- Spread Gross: {spread_signed:+.2f}% | Abs: {spread_pct:.2f}%")
                         logger.info(
-                            f"--- Spread Net: {net_signed:+.2f}% | Abs: {net_spread_pct:.2f}% "
-                            f"(Fees {fee_strip['total_fees_pct']:.2f}%)"
+                            f"--- Spread Net: {float(net_signed):+.2f}% | Abs: {float(net_spread_pct):.2f}% "
+                            f"(Fees {float(fee_strip['total_fees_pct']):.2f}%)"
                         )
 
-                        if net_spread_pct >= self.min_spread:
+                        if net_spread_pct >= threshold:
                             opp = ArbitrageOpportunity(
                                 platform_a='polymarket',
                                 platform_b='sxbet',
@@ -961,15 +848,15 @@ class DualArbitrageScanner:
                                 price_a=poly_yes,
                                 price_b=sx_bid,
                                 spread_pct=spread_pct,
-                                net_spread_pct=net_spread_pct,
+                                net_spread_pct=float(net_spread_pct),
                                 direction='buy_poly_sell_sx',
-                                is_profitable=net_spread_pct >= self.min_spread,
+                                is_profitable=net_spread_pct >= threshold,
                                 detected_at=datetime.now(),
                                 notes=f"Matched: {common}"
                             )
                             opportunities.append(opp)
                             logger.info(f"\n{opp}")
-                            self._record_event(f"SX OPP {poly_question[:24]} | Net {net_spread_pct:.2f}%")
+                            self._record_event(f"SX OPP {poly_question[:24]} | Net {float(net_spread_pct):.2f}%")
                         else:
                             logger.info("--- Status: REJECTED (Min profit not met)")
                     
@@ -980,17 +867,18 @@ class DualArbitrageScanner:
                         fee_strip = self._apply_fee_stripping(spread_signed)
                         net_signed = fee_strip["net_signed"]
                         net_spread_pct = fee_strip["net_abs"]
+                        threshold = Decimal(str(self.min_spread))
 
                         logger.info(f"\n[MATH CHECK] {poly_question[:60]}")
                         logger.info(f"--- Polymarket (Yes): Price {poly_yes:.3f}")
                         logger.info(f"--- SX Bet (Ask): {sx_ask:.3f}")
                         logger.info(f"--- Spread Gross: {spread_signed:+.2f}% | Abs: {spread_pct:.2f}%")
                         logger.info(
-                            f"--- Spread Net: {net_signed:+.2f}% | Abs: {net_spread_pct:.2f}% "
-                            f"(Fees {fee_strip['total_fees_pct']:.2f}%)"
+                            f"--- Spread Net: {float(net_signed):+.2f}% | Abs: {float(net_spread_pct):.2f}% "
+                            f"(Fees {float(fee_strip['total_fees_pct']):.2f}%)"
                         )
 
-                        if net_spread_pct >= self.min_spread:
+                        if net_spread_pct >= threshold:
                             opp = ArbitrageOpportunity(
                                 platform_a='sxbet',
                                 platform_b='polymarket',
@@ -1001,15 +889,15 @@ class DualArbitrageScanner:
                                 price_a=sx_ask,
                                 price_b=poly_yes,
                                 spread_pct=spread_pct,
-                                net_spread_pct=net_spread_pct,
+                                net_spread_pct=float(net_spread_pct),
                                 direction='buy_sx_sell_poly',
-                                is_profitable=net_spread_pct >= self.min_spread,
+                                is_profitable=net_spread_pct >= threshold,
                                 detected_at=datetime.now(),
                                 notes=f"Matched: {common}"
                             )
                             opportunities.append(opp)
                             logger.info(f"\n{opp}")
-                            self._record_event(f"SX OPP {poly_question[:24]} | Net {net_spread_pct:.2f}%")
+                            self._record_event(f"SX OPP {poly_question[:24]} | Net {float(net_spread_pct):.2f}%")
                         else:
                             logger.info("--- Status: REJECTED (Min profit not met)")
         
@@ -1126,6 +1014,30 @@ async def main():
         type=float,
         default=500.0,
         help='Minimum market liquidity in $ (default: 500)'
+    )
+    parser.add_argument(
+        '--poly-fee-pct',
+        type=float,
+        default=0.5,
+        help='Polymarket fee percentage (default: 0.5)'
+    )
+    parser.add_argument(
+        '--betfair-commission-pct',
+        type=float,
+        default=6.5,
+        help='Betfair commission percentage (default: 6.5)'
+    )
+    parser.add_argument(
+        '--gas-fee-pct',
+        type=float,
+        default=0.0,
+        help='Estimated gas fee percentage (default: 0.0)'
+    )
+    parser.add_argument(
+        '--slippage-pct',
+        type=float,
+        default=0.0,
+        help='Slippage buffer percentage (default: 0.0)'
     )
     parser.add_argument(
         '--poly-fee-pct',
