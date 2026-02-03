@@ -12,7 +12,8 @@ from src.risk.position_sizer import KellyPositionSizer
 from src.alerts.command_center import CommandCenterNotifier
 from src.execution.paper_engine import PaperExecutionEngine
 from src.risk.risk_guardian import RiskGuardian
-from src.data.price_logger import ticker_logger
+from src.utils.json_decimal import loads_decimal
+from src.data.entity_resolution import EntityResolver
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,17 @@ class SmartRouter:
                 if key in result:
                     return result[key]
         return None
+
+    @staticmethod
+    def parse_ws_payload(payload: str) -> Dict[str, Any]:
+        return loads_decimal(payload)
+
+    @staticmethod
+    def normalize_entity(raw_name: str, resolver: Optional[EntityResolver] = None) -> Optional[str]:
+        if not raw_name:
+            return None
+        resolver = resolver or EntityResolver()
+        return resolver.resolve(raw_name)
 
     async def _cancel_leg(self, leg: Dict) -> bool:
         async with self._order_lock:
@@ -448,35 +460,3 @@ class SmartRouter:
         if timeout_s:
             return await asyncio.wait_for(self._place_order_task(leg), timeout=timeout_s)
         return await self._place_order_task(leg)
-    async def handle_market_update(self, event: Any):
-        """
-        Callback for Pub/Sub from Streams.
-        Logic: Update internal state and check for arb ops.
-        """
-        start_handle = asyncio.get_event_loop().time()
-        
-        # 1. Log Tick to InfluxDB (The Black Box)
-        # Note: PriceTickerLogger is now ASYNC/Batch
-        ticker_logger.log_tick(
-            platform=event.platform,
-            market_id=event.market_id,
-            price=(event.best_bid + event.best_ask) / 2, # Mid for logging simplicity
-            size=event.bid_size + event.ask_size,
-            side="STREAM"
-        )
-        
-        # 2. Benchmark (Task 2)
-        latency_ms = (asyncio.get_event_loop().time() - event.timestamp) * 1000
-        decision_time_ms = (asyncio.get_event_loop().time() - start_handle) * 1000
-        
-        if latency_ms > 50:
-            logger.warning(f"⚠️ High Latency Detected: {latency_ms:.2f}ms (Tick to Router)")
-            
-        # 3. Decision Logic (Codex)
-        # Here we would call the polytope math or solver
-        # For now, we log the ready state
-        # self._recalculate_arb(event)
-        
-        total_time = latency_ms + decision_time_ms
-        if total_time > 100:
-            logger.warning(f"🐢 SLOW SYSTEM: Total Tick-to-Trade {total_time:.2f}ms")

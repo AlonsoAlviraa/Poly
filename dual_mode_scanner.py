@@ -1064,6 +1064,30 @@ async def main():
         help='Slippage buffer percentage (default: 0.0)'
     )
     parser.add_argument(
+        '--poly-fee-pct',
+        type=float,
+        default=0.5,
+        help='Polymarket fee percentage (default: 0.5)'
+    )
+    parser.add_argument(
+        '--betfair-commission-pct',
+        type=float,
+        default=6.5,
+        help='Betfair commission percentage (default: 6.5)'
+    )
+    parser.add_argument(
+        '--gas-fee-pct',
+        type=float,
+        default=0.0,
+        help='Estimated gas fee percentage (default: 0.0)'
+    )
+    parser.add_argument(
+        '--slippage-pct',
+        type=float,
+        default=0.0,
+        help='Slippage buffer percentage (default: 0.0)'
+    )
+    parser.add_argument(
         '--use-llm',
         action='store_true',
         help='Enable LLM (MiMo-V2-Flash) for intelligent market matching'
