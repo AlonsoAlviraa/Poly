@@ -44,6 +44,7 @@ class DualLaneResolver:
             mappings_path = os.path.join(os.path.dirname(__file__), 'mappings.json')
         
         self.mappings_path = mappings_path
+        self.learned_path = os.path.join(os.path.dirname(mappings_path), 'learned_mappings.json')
         self.max_pending = max_pending
         
         # Fast Lane Data Structures
@@ -68,13 +69,32 @@ class DualLaneResolver:
     
     def _load_mappings(self):
         """Load and flatten mappings from JSON."""
-        if not os.path.exists(self.mappings_path):
-            logger.warning(f"[DualLane] Mappings not found: {self.mappings_path}")
-            return
-        
         try:
-            with open(self.mappings_path, 'r', encoding='utf-8') as f:
-                self.categories = json.load(f)
+            # Load Master Mappings
+            if os.path.exists(self.mappings_path):
+                with open(self.mappings_path, 'r', encoding='utf-8') as f:
+                    self.categories = json.load(f)
+            
+            # Load Learned Mappings (DELTA)
+            self.learned_data = {}
+            if os.path.exists(self.learned_path):
+                try:
+                    with open(self.learned_path, 'r', encoding='utf-8') as f:
+                        self.learned_data = json.load(f)
+                        # Merge learned into categories
+                        for cat, entities in self.learned_data.items():
+                            if cat not in self.categories:
+                                self.categories[cat] = {}
+                            for canonical, aliases in entities.items():
+                                if canonical not in self.categories[cat]:
+                                    self.categories[cat][canonical] = []
+                                # Only add aliases not already in master
+                                master_aliases = set(self.categories[cat].get(canonical, []))
+                                for a in aliases:
+                                    if a not in master_aliases:
+                                        self.categories[cat][canonical].append(a)
+                except Exception as e:
+                    logger.error(f"[DualLane] Error loading learned mappings: {e}")
             
             self.canonical_map.clear()
             self.canonicals.clear()
@@ -173,17 +193,38 @@ class DualLaneResolver:
         
         self.categories[category][canonical].append(new_alias)
         
-        # Persist immediately
-        self._save_mappings()
-        logger.info(f"[SlowLane] Learned: '{new_alias}' -> '{canonical}'")
+        # Update learned_data tracker for persistence
+        if category not in self.learned_data:
+            self.learned_data[category] = {}
+        if canonical not in self.learned_data[category]:
+            self.learned_data[category][canonical] = []
+        if new_alias not in self.learned_data[category][canonical]:
+            self.learned_data[category][canonical].append(new_alias)
+        
+        # Persist ONLY to learned_mappings.json
+        self._save_learned()
+        logger.info(f"[SlowLane] Learned: '{new_alias}' -> '{canonical}' (Saved to learned_mappings.json)")
+    
+    def _save_learned(self):
+        """Persist discovery to learned_mappings.json."""
+        try:
+            # We save ONLY the learned delta to keep it modular
+            # Re-read existing learned to ensure we don't lose other session data 
+            # (though normally this instance is the only one writing)
+            with open(self.learned_path, 'w', encoding='utf-8') as f:
+                # Build structure for learned_data from current session + previous learned
+                # For simplicity, we keep learned_data in memory
+                json.dump(self.learned_data, f, indent=4, sort_keys=True, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[DualLane] Learned Save error: {e}")
     
     def _save_mappings(self):
-        """Persist current mappings to JSON."""
+        """Persist MASTER mappings to JSON (Use with caution)."""
         try:
             with open(self.mappings_path, 'w', encoding='utf-8') as f:
                 json.dump(self.categories, f, indent=4, sort_keys=True, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"[DualLane] Save error: {e}")
+            logger.error(f"[DualLane] Master Save error: {e}")
     
     def get_pending_batch(self, batch_size: int = 10) -> List[PendingMatch]:
         """Get a batch of pending matches for LLM processing."""
