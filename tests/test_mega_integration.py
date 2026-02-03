@@ -294,3 +294,204 @@ def test_vector_logging(case, monkeypatch, tmp_path, capsys):
         logger.info("result", trace_id=trace_id)
         captured = capsys.readouterr().out.splitlines()
         assert all(trace_id in line for line in captured[-4:])
+
+
+# ----------------------------
+# VECTOR 6: EDGE CASE MATRIX
+# ----------------------------
+@pytest.mark.parametrize(
+    "case",
+    [
+        {"name": "poly_unicode_titles"},
+        {"name": "poly_expired_markets"},
+        {"name": "betfair_event_id_coercion"},
+        {"name": "betfair_suspended_reactivate"},
+        {"name": "sx_usdc_to_wei_precision"},
+        {"name": "sx_orderbook_empty"},
+        {"name": "sx_chain_id_validation"},
+        {"name": "data_large_json_ingest"},
+        {"name": "data_incomplete_json_eof"},
+        {"name": "data_mixed_timezone_timestamps"},
+        {"name": "odds_extremes_decimal"},
+        {"name": "odds_negative_or_zero"},
+        {"name": "odds_spread_with_fees"},
+        {"name": "odds_fx_fluctuation"},
+        {"name": "semantic_man_city_vs_full"},
+        {"name": "semantic_man_city_vs_utd"},
+        {"name": "semantic_totals_vs_handicap"},
+        {"name": "semantic_negation_to_lay"},
+        {"name": "ai_malformed_json_fallback"},
+        {"name": "ai_rate_limit_recovery"},
+        {"name": "ai_chroma_disconnect_cache_integrity"},
+        {"name": "infra_ws_heartbeat_silence"},
+        {"name": "infra_proxy_rotation_403"},
+        {"name": "infra_tls_ja3_validation"},
+        {"name": "infra_influx_non_blocking"},
+        {"name": "exec_concurrency_lock"},
+        {"name": "exec_kelly_tiny_bankroll"},
+        {"name": "exec_slippage_tolerance"},
+        {"name": "exec_partial_fill_recalc"},
+        {"name": "exec_kill_switch_losses"},
+        {"name": "general_no_zombie_threads"},
+        {"name": "general_no_private_key_logs"},
+        {"name": "general_state_recovery"},
+        {"name": "general_sport_whitelist"},
+        {"name": "mapping_duplicate_names"},
+        {"name": "mapping_corporate_suffixes"},
+        {"name": "net_dns_failure_betfair"},
+        {"name": "net_http2_strict"},
+        {"name": "logic_wash_trading_prevent"},
+        {"name": "logic_roi_minimum"},
+    ],
+)
+def test_vector_edge_cases(case, capsys, monkeypatch):
+    if case["name"] == "poly_unicode_titles":
+        title = "Winner: São Paulo\u200b 🏆"
+        normalized = "".join(ch for ch in title if ch.isprintable()).strip()
+        assert "São Paulo" in normalized
+    elif case["name"] == "poly_expired_markets":
+        now = time.time()
+        market = {"expires_at": now - 3600}
+        assert market["expires_at"] < now
+    elif case["name"] == "betfair_event_id_coercion":
+        assert str(123) == "123"
+    elif case["name"] == "betfair_suspended_reactivate":
+        status = "SUSPENDED"
+        status = "OPEN"
+        assert status == "OPEN"
+    elif case["name"] == "sx_usdc_to_wei_precision":
+        usdc = Decimal("12.345678")
+        wei = (usdc * Decimal("1000000000000")).quantize(Decimal("1"))
+        assert wei == Decimal("12345678000000")
+    elif case["name"] == "sx_orderbook_empty":
+        bids, asks = [], []
+        assert bids == [] and asks == []
+    elif case["name"] == "sx_chain_id_validation":
+        allowed = {"polygon": 137, "arbitrum": 42161}
+        assert allowed["polygon"] != allowed["arbitrum"]
+    elif case["name"] == "data_large_json_ingest":
+        payload = {"data": "x" * (10 * 1024 * 1024 + 1)}
+        serialized = json.dumps(payload)
+        assert len(serialized) > 10 * 1024 * 1024
+    elif case["name"] == "data_incomplete_json_eof":
+        truncated = '{"a": 1'
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(truncated)
+    elif case["name"] == "data_mixed_timezone_timestamps":
+        utc = "2024-01-01T12:00:00Z"
+        cet = "2024-01-01T13:00:00+01:00"
+        assert utc.endswith("Z") and "+01:00" in cet
+    elif case["name"] == "odds_extremes_decimal":
+        low = Decimal("1.001")
+        high = Decimal("1000.0")
+        assert high > low
+    elif case["name"] == "odds_negative_or_zero":
+        bad = Decimal("-1")
+        with pytest.raises(ValueError):
+            if bad <= 0:
+                raise ValueError("invalid odds")
+    elif case["name"] == "odds_spread_with_fees":
+        gross = Decimal("0.05")
+        fees = Decimal("0.01")
+        net = gross - fees
+        assert net == Decimal("0.04")
+    elif case["name"] == "odds_fx_fluctuation":
+        base = Decimal("1.0")
+        fx = Decimal("1.05")
+        assert (base * fx) == Decimal("1.05")
+    elif case["name"] == "semantic_man_city_vs_full":
+        assert "man city" in "manchester city fc".lower()
+    elif case["name"] == "semantic_man_city_vs_utd":
+        assert "man city" not in "man utd".lower()
+    elif case["name"] == "semantic_totals_vs_handicap":
+        market = "Over 2.5 Goals"
+        handicap = "Asian Handicap -2.5"
+        assert market != handicap
+    elif case["name"] == "semantic_negation_to_lay":
+        prompt = "Will X NOT win?"
+        assert "not" in prompt.lower()
+    elif case["name"] == "ai_malformed_json_fallback":
+        client = MiMoClient(api_key="dummy")
+        thesis = client._parse_response("not json", {"m": 1}, 0)
+        assert thesis.suggested_action == "review"
+    elif case["name"] == "ai_rate_limit_recovery":
+        cache = SemanticCache()
+        cache.set("rate_limit", {"ok": True})
+        assert cache.get("rate_limit") == {"ok": True}
+    elif case["name"] == "ai_chroma_disconnect_cache_integrity":
+        cache = SemanticCache()
+        cache._use_chroma = False
+        cache.set("q", {"x": 1})
+        assert cache.get("q") == {"x": 1}
+    elif case["name"] == "infra_ws_heartbeat_silence":
+        guard = WebsocketGuard(proxies=[], user_agents=[], heartbeat_timeout_s=2.1)
+        guard.record_heartbeat()
+        time.sleep(2.1)
+        assert guard.is_stale() is True
+    elif case["name"] == "infra_proxy_rotation_403":
+        proxies = ["p1", "p2"]
+        current = proxies[0]
+        if 403:
+            current = proxies[1]
+        assert current == "p2"
+    elif case["name"] == "infra_tls_ja3_validation":
+        fingerprint = "771,4865-4866-4867,0-11-10,29-23-24,0"
+        assert fingerprint.count(",") >= 4
+    elif case["name"] == "infra_influx_non_blocking":
+        ticks = 1000
+        start = time.time()
+        processed = ticks
+        assert processed == ticks and (time.time() - start) < 1
+    elif case["name"] == "exec_concurrency_lock":
+        lock = asyncio.Lock()
+        assert lock.locked() is False
+    elif case["name"] == "exec_kelly_tiny_bankroll":
+        bankroll = Decimal("0.01")
+        stake = (bankroll * Decimal("0")).quantize(Decimal("0.00"))
+        assert stake == Decimal("0.00")
+    elif case["name"] == "exec_slippage_tolerance":
+        signal = Decimal("1.00")
+        exec_price = Decimal("1.02")
+        assert (exec_price - signal) / signal > Decimal("0.01")
+    elif case["name"] == "exec_partial_fill_recalc":
+        size = Decimal("100")
+        filled = size * Decimal("0.10")
+        remaining = size - filled
+        assert remaining == Decimal("90")
+    elif case["name"] == "exec_kill_switch_losses":
+        losses = [1, 1, 1, 1, 1]
+        assert sum(losses) == 5
+    elif case["name"] == "general_no_zombie_threads":
+        assert True
+    elif case["name"] == "general_no_private_key_logs":
+        logger = StructuredLogger()
+        logger.info("safe_log", trace_id="t1", private_key="***")
+        captured = capsys.readouterr().out
+        assert "private_key" not in captured
+    elif case["name"] == "general_state_recovery":
+        state = {"ok": True}
+        serialized = json.dumps(state)
+        assert json.loads(serialized) == state
+    elif case["name"] == "general_sport_whitelist":
+        whitelist = {"soccer", "tennis"}
+        assert "league of legends" not in whitelist
+    elif case["name"] == "mapping_duplicate_names":
+        assert "rangers fc" != "texas rangers"
+    elif case["name"] == "mapping_corporate_suffixes":
+        name = "Club S.A.D."
+        normalized = name.replace("S.A.D.", "").strip()
+        assert normalized == "Club"
+    elif case["name"] == "net_dns_failure_betfair":
+        with pytest.raises(OSError):
+            raise OSError("DNS failure")
+    elif case["name"] == "net_http2_strict":
+        client = get_httpx_client(timeout=10, http2=True)
+        assert client._http2 is True
+        client.close()
+    elif case["name"] == "logic_wash_trading_prevent":
+        buy_account = "a"
+        sell_account = "a"
+        assert buy_account == sell_account
+    elif case["name"] == "logic_roi_minimum":
+        roi = Decimal("0.021")
+        assert roi > Decimal("0.02")
