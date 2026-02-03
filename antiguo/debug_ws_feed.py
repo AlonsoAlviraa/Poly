@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
 import json
+import os
 import websockets
 from config import POLY_HOST
 
@@ -32,7 +33,7 @@ async def main():
     print(f"Using Token ID: {token_id}")
     
     # Polymarket WS Endpoint
-    ws_url = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+    ws_url = os.getenv("POLY_WS_URL", "wss://ws-subscriptions-clob.polymarket.com/ws/market")
     
     async with websockets.connect(ws_url) as websocket:
         print("[OK] Connected to WS.")

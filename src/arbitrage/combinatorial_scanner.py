@@ -16,7 +16,7 @@ import json
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import httpx
+from src.utils.http_client import get_httpx_client
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class GammaEventFetcher:
         }
         
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with get_httpx_client(timeout=self.timeout, http2=True) as client:
                 resp = client.get(f"{self.BASE_URL}/events", params=params)
                 resp.raise_for_status()
                 events = resp.json()
@@ -86,7 +86,7 @@ class GammaEventFetcher:
     def get_event_by_id(self, event_id: str) -> Optional[Dict]:
         """Fetch a specific event by ID."""
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with get_httpx_client(timeout=self.timeout, http2=True) as client:
                 resp = client.get(f"{self.BASE_URL}/events/{event_id}")
                 resp.raise_for_status()
                 return resp.json()

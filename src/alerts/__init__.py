@@ -8,10 +8,12 @@ from .telegram_notifier import (
     Alert,
     ArbitrageAlertIntegration
 )
+from .command_center import CommandCenterNotifier
 
 __all__ = [
     'AlertManager',
     'TelegramNotifier',
     'Alert',
-    'ArbitrageAlertIntegration'
+    'ArbitrageAlertIntegration',
+    'CommandCenterNotifier'
 ]

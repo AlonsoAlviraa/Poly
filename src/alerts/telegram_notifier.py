@@ -66,7 +66,7 @@ class TelegramNotifier:
             return False
             
         try:
-            import httpx
+            from src.utils.http_client import get_httpx_client
             
             url = self.API_URL.format(token=self.bot_token, method='sendMessage')
             
@@ -77,7 +77,7 @@ class TelegramNotifier:
                 'disable_web_page_preview': True
             }
             
-            with httpx.Client(timeout=10) as client:
+            with get_httpx_client(timeout=10, http2=True) as client:
                 resp = client.post(url, json=payload)
                 resp.raise_for_status()
                 
