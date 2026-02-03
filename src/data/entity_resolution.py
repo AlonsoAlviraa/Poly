@@ -34,8 +34,7 @@ class EntityResolver:
             "milan", "madrid", "new york", "los angeles"
         }
         self.PREFERRED_CANONICALS = {
-            "man city": "Manchester City",
-            "manchester city": "Manchester City"
+            "man city": "Manchester City"
         }
         
         self._load_mappings()

@@ -4,12 +4,12 @@ Gamma API Client for Polymarket Market Discovery.
 Enhanced with advanced filtering, caching, and market scoring.
 """
 
-import httpx
 import logging
 import time
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
+from src.utils.http_client import get_httpx_client
 logger = logging.getLogger(__name__)
 
 
@@ -80,7 +80,7 @@ class GammaAPIClient:
             params["tag_id"] = tag_id
         
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with get_httpx_client(timeout=self.timeout, http2=True) as client:
                 resp = client.get(f"{self.BASE_URL}/markets", params=params)
                 resp.raise_for_status()
                 result = resp.json()
@@ -144,7 +144,7 @@ class GammaAPIClient:
             params["series_id"] = series_id
         
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with get_httpx_client(timeout=self.timeout, http2=True) as client:
                 resp = client.get(f"{self.BASE_URL}/events", params=params)
                 resp.raise_for_status()
                 events = resp.json()
@@ -377,7 +377,7 @@ class GammaAPIClient:
             params["closed"] = str(closed).lower()
             
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with get_httpx_client(timeout=self.timeout, http2=True) as client:
                 resp = client.get(f"{self.BASE_URL}/events", params=params)
                 resp.raise_for_status()
                 result = resp.json()
@@ -392,7 +392,7 @@ class GammaAPIClient:
         Fetch a specific market by its condition ID.
         """
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with get_httpx_client(timeout=self.timeout, http2=True) as client:
                 resp = client.get(f"{self.BASE_URL}/markets/{condition_id}")
                 resp.raise_for_status()
                 return resp.json()
@@ -405,7 +405,7 @@ class GammaAPIClient:
         Search markets by keyword.
         """
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with get_httpx_client(timeout=self.timeout, http2=True) as client:
                 resp = client.get(
                     f"{self.BASE_URL}/search",
                     params={"query": query, "limit": limit}

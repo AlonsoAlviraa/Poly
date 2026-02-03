@@ -27,9 +27,9 @@ class CommandCenterNotifier:
             logger.debug("[DISCORD DISABLED] No webhook configured.")
             return False
         try:
-            import httpx
+            from src.utils.http_client import get_httpx_client
 
-            with httpx.Client(timeout=10) as client:
+            with get_httpx_client(timeout=10, http2=True) as client:
                 response = client.post(self.discord_webhook_url, json={"content": content})
                 response.raise_for_status()
             return True

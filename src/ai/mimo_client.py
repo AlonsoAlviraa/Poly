@@ -101,6 +101,11 @@ class SemanticCache:
             
         except Exception as e:
             logger.warning(f"[Cache] Query error: {e}")
+            self._use_chroma = False
+            if query_hash in self._simple_cache:
+                entry = self._simple_cache[query_hash]
+                if time.time() - entry['timestamp'] < self.ttl_seconds:
+                    return entry['data']
             return None
     
     def set(self, market_description: str, data: Dict):
@@ -140,8 +145,13 @@ class SemanticCache:
                         'hash': query_hash
                     }]
                 )
-            except:
+            except Exception:
                 logger.warning(f"[Cache] Set error: {e}")
+                self._use_chroma = False
+                self._simple_cache[query_hash] = {
+                    'data': data,
+                    'timestamp': timestamp
+                }
     
     def get_stats(self) -> Dict:
         """Get cache statistics."""
@@ -201,8 +211,9 @@ class MiMoClient:
                     api_key=self.api_key
                 )
             except ImportError:
-                logger.error("[MiMo] openai package not installed")
-                raise
+                logger.error("[MiMo] openai package not installed - AI disabled")
+                self._client = None
+                self.api_key = None
     
     async def analyze_arbitrage(self, 
                                 market_data: Dict,
@@ -228,6 +239,15 @@ class MiMoClient:
             )
         
         await self._init_client()
+        if self._client is None:
+            return AIThesis(
+                is_arb=False,
+                confidence=0.0,
+                reasoning="AI disabled - openai not installed",
+                suggested_action="none",
+                markets_analyzed=[],
+                cached=False
+            )
         
         # Build compact prompt
         prompt = self._build_analysis_prompt(market_data, context)

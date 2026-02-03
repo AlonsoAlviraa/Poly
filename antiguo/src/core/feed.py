@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import os
 import websockets
 from typing import List, Callable, Dict, Any, Optional
 
@@ -13,7 +14,9 @@ class MarketDataFeed:
     Manages WebSocket connection, subscriptions, and message dispatch.
     """
     
-    def __init__(self, endpoint: str = "wss://ws-subscriptions-clob.polymarket.com/ws/market"):
+    def __init__(self, endpoint: str = None):
+        if endpoint is None:
+            endpoint = os.getenv("POLY_WS_URL", "wss://ws-subscriptions-clob.polymarket.com/ws/market")
         self.endpoint = endpoint
         self.websocket = None
         self.running = False
