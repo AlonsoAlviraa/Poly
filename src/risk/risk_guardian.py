@@ -21,7 +21,9 @@ class RiskGuardian:
         max_consecutive_losers: int = 5,
         pause_minutes: int = 60,
         api_error_limit: int = 10,
-        api_error_window_s: int = 60
+        api_error_window_s: int = 60,
+        notifier: Optional[object] = None,
+        kill_on_drawdown: bool = False
     ):
         self.initial_balance = initial_balance
         self.max_drawdown_pct = max_drawdown_pct
@@ -29,6 +31,8 @@ class RiskGuardian:
         self.pause_minutes = pause_minutes
         self.api_error_limit = api_error_limit
         self.api_error_window_s = api_error_window_s
+        self.notifier = notifier
+        self.kill_on_drawdown = kill_on_drawdown
 
         self.current_balance = initial_balance
         self.consecutive_losers = 0
@@ -78,11 +82,17 @@ class RiskGuardian:
         if self._drawdown_pct() > self.max_drawdown_pct:
             self.pause_until = datetime.now(timezone.utc) + timedelta(minutes=self.pause_minutes)
             logger.critical("RiskGuardian triggered drawdown kill switch.")
+            if self.notifier:
+                self.notifier.send_alert("Kill Switch: Drawdown diario excedido.")
+            if self.kill_on_drawdown:
+                raise SystemExit("Drawdown limit reached.")
 
     def _check_consecutive_losses(self) -> None:
         if self.consecutive_losers >= self.max_consecutive_losers:
             self.pause_until = datetime.now(timezone.utc) + timedelta(minutes=self.pause_minutes)
             logger.critical("RiskGuardian triggered consecutive losses kill switch.")
+            if self.notifier:
+                self.notifier.send_alert("Kill Switch: pérdidas consecutivas detectadas.")
 
     def _trim_api_errors(self, now: datetime) -> None:
         while self.api_errors and (now - self.api_errors[0]).total_seconds() > self.api_error_window_s:

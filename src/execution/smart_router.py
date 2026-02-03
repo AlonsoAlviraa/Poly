@@ -115,7 +115,8 @@ class SmartRouter:
         edge_pct: float,
         win_prob: float,
         liquidity_limit: float,
-        max_exposure_pct: Optional[float] = None
+        max_exposure_pct: Optional[float] = None,
+        min_bet: float = 0.0
     ) -> float:
         max_exposure = bankroll * (max_exposure_pct if max_exposure_pct is not None else self.max_exposure_pct)
         profit_ratio = max(edge_pct / 100.0, 0.0)
@@ -125,7 +126,10 @@ class SmartRouter:
             profit_ratio=profit_ratio,
             liquidity_limit=liquidity_limit
         )
-        return min(size, max_exposure)
+        final_size = min(size, max_exposure)
+        if final_size < min_bet:
+            return 0.0
+        return final_size
 
     def _is_worse_price(self, leg: Dict, new_price: float, reference: float) -> bool:
         price_format = leg.get("price_format", "odds")
@@ -175,7 +179,8 @@ class SmartRouter:
         edge_pct: Optional[float],
         win_prob: float,
         liquidity_limit: float,
-        max_exposure_pct: Optional[float]
+        max_exposure_pct: Optional[float],
+        min_bet: float
     ) -> Tuple[List[Dict], Optional[float]]:
         if bankroll is None or edge_pct is None:
             return strategy_legs, None
@@ -185,7 +190,8 @@ class SmartRouter:
             edge_pct=edge_pct,
             win_prob=win_prob,
             liquidity_limit=liquidity_limit,
-            max_exposure_pct=max_exposure_pct
+            max_exposure_pct=max_exposure_pct,
+            min_bet=min_bet
         )
         if size <= 0:
             return strategy_legs, 0.0
@@ -205,7 +211,8 @@ class SmartRouter:
         edge_pct: Optional[float] = None,
         win_prob: float = 0.98,
         liquidity_limit: float = float("inf"),
-        max_exposure_pct: Optional[float] = None
+        max_exposure_pct: Optional[float] = None,
+        min_bet: float = 0.0
     ) -> Dict:
         """
         Validates and executes a multi-leg strategy.
@@ -235,7 +242,8 @@ class SmartRouter:
             edge_pct=edge_pct,
             win_prob=win_prob,
             liquidity_limit=liquidity_limit,
-            max_exposure_pct=max_exposure_pct
+            max_exposure_pct=max_exposure_pct,
+            min_bet=min_bet
         )
         if kelly_size == 0:
             return {"success": False, "reason": "Kelly sizing returned 0 (no edge)"}
@@ -348,7 +356,8 @@ class SmartRouter:
         edge_pct: Optional[float] = None,
         win_prob: float = 0.98,
         liquidity_limit: float = float("inf"),
-        max_exposure_pct: Optional[float] = None
+        max_exposure_pct: Optional[float] = None,
+        min_bet: float = 0.0
     ) -> Dict:
         """
         Execute legs concurrently. If any leg fails or exceeds slippage, cancel/hedge immediately.
@@ -362,12 +371,13 @@ class SmartRouter:
             edge_pct=edge_pct,
             win_prob=win_prob,
             liquidity_limit=liquidity_limit,
-            max_exposure_pct=max_exposure_pct
+            max_exposure_pct=max_exposure_pct,
+            min_bet=min_bet
         )
         if kelly_size == 0:
             return {"success": False, "reason": "Kelly sizing returned 0 (no edge)"}
 
-        tasks = [self._place_order_task(leg) for leg in strategy_legs]
+        tasks = [self._execute_leg_with_timeout(leg) for leg in strategy_legs]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         successful_legs = []
@@ -419,3 +429,9 @@ class SmartRouter:
             "reason": "Atomic execution success",
             "order_ids": [l.get('order_id') for l in strategy_legs]
         }
+
+    async def _execute_leg_with_timeout(self, leg: Dict) -> Any:
+        timeout_s = leg.get("timeout_s")
+        if timeout_s:
+            return await asyncio.wait_for(self._place_order_task(leg), timeout=timeout_s)
+        return await self._place_order_task(leg)

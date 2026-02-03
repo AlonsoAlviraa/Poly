@@ -1,5 +1,7 @@
 from datetime import datetime
 from typing import List, Dict, Optional
+import threading
+import time
 
 from rich.console import Console
 from rich.live import Live
@@ -22,39 +24,52 @@ class TerminalDashboard:
         self.positions: List[Dict] = []
         self.events: List[str] = []
         self.websocket_status = "unknown"
+        self._lock = threading.Lock()
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
 
     def start(self) -> None:
         if self.live:
             return
-        self.live = Live(self._render_layout(), console=self.console, refresh_per_second=4)
-        self.live.start()
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._thread.start()
 
     def stop(self) -> None:
-        if self.live:
-            self.live.stop()
-            self.live = None
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=2)
+            self._thread = None
 
     def update_summary(self, balance: float, pnl_daily: float, exposure: float) -> None:
-        self.balance = balance
-        self.pnl_daily = pnl_daily
-        self.exposure = exposure
-        self._refresh()
+        with self._lock:
+            self.balance = balance
+            self.pnl_daily = pnl_daily
+            self.exposure = exposure
 
     def update_positions(self, positions: List[Dict]) -> None:
-        self.positions = positions
-        self._refresh()
+        with self._lock:
+            self.positions = positions
 
     def update_events(self, events: List[str]) -> None:
-        self.events = events[-5:]
-        self._refresh()
+        with self._lock:
+            self.events = events[-5:]
 
     def update_websocket_status(self, status: str) -> None:
-        self.websocket_status = status
-        self._refresh()
+        with self._lock:
+            self.websocket_status = status
 
     def _refresh(self) -> None:
         if self.live:
             self.live.update(self._render_layout())
+
+    def _run_loop(self) -> None:
+        with Live(self._render_layout(), console=self.console, refresh_per_second=10) as live:
+            self.live = live
+            while not self._stop_event.is_set():
+                self._refresh()
+                time.sleep(0.1)
+        self.live = None
 
     def _render_layout(self) -> Layout:
         layout = Layout()
@@ -72,11 +87,16 @@ class TerminalDashboard:
         table.add_column("Exposición", justify="right")
         table.add_column("WS", justify="center")
 
+        with self._lock:
+            balance = self.balance
+            pnl_daily = self.pnl_daily
+            exposure = self.exposure
+            websocket_status = self.websocket_status
         table.add_row(
-            f"${self.balance:,.2f}",
-            f"${self.pnl_daily:,.2f}",
-            f"${self.exposure:,.2f}",
-            self.websocket_status
+            f"${balance:,.2f}",
+            f"${pnl_daily:,.2f}",
+            f"${exposure:,.2f}",
+            websocket_status
         )
         return table
 
@@ -87,12 +107,15 @@ class TerminalDashboard:
         table.add_column("P&L", justify="right")
         table.add_column("Tiempo", justify="right")
 
-        if not self.positions:
+        with self._lock:
+            positions = list(self.positions)
+
+        if not positions:
             table.add_row("—", "—", "—", "—")
             return table
 
         now = datetime.utcnow()
-        for pos in self.positions:
+        for pos in positions:
             opened = pos.get("opened_at", now)
             elapsed = (now - opened).total_seconds()
             table.add_row(
@@ -106,6 +129,8 @@ class TerminalDashboard:
     def _render_events(self) -> Table:
         table = Table(title="🧾 Últimos Eventos")
         table.add_column("Evento")
-        for event in self.events[-5:]:
+        with self._lock:
+            events = list(self.events[-5:])
+        for event in events:
             table.add_row(event)
         return table
