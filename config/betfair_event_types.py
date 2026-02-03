@@ -85,6 +85,7 @@ SPORTS_KEYWORDS: List[str] = [
     "f1", "formula 1", "formula one",
     "olympics", "olympic",
     "golf", "pga", "masters",
+    "esports", "gaming", "lol", "dota", "valorant", "csgo", "counter-strike",
     
     # Match patterns (individual games)
     "win on", "vs", "v.", "o/u", "over/under",

@@ -86,10 +86,12 @@ class BetfairPrice:
     runner_name: str
     back_price: float  # Price to buy (bet for)
     lay_price: float   # Price to sell (bet against)
-    back_size: float   # Available volume
+    back_size: float   # Available volume at best price
     lay_size: float
-    last_traded: float
-    timestamp: datetime
+    back_liquidity_top3: float = 0.0  # Sum of volume in top 3 levels
+    lay_liquidity_top3: float = 0.0
+    last_traded: float = 0.0
+    timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
 class BetfairClient:
@@ -528,6 +530,10 @@ class BetfairClient:
             'marketIds': market_ids,
             'priceProjection': {
                 'priceData': ['EX_BEST_OFFERS'],
+                'exBestOffersOverrides': {
+                    'bestPricesDepth': 3,
+                    'rollupLimit': 3
+                },
                 'virtualise': True
             }
         })
@@ -554,6 +560,10 @@ class BetfairClient:
                     lay_prices = runner.get('ex', {}).get('availableToLay', [])
                     best_lay = lay_prices[0] if lay_prices else {'price': 0, 'size': 0}
                     
+                    # Calculate top 3 liquidity
+                    back_liq_top3 = sum(p.get('size', 0) for p in back_prices[:3])
+                    lay_liq_top3 = sum(p.get('size', 0) for p in lay_prices[:3])
+                    
                     price = BetfairPrice(
                         market_id=market_id,
                         selection_id=selection_id,
@@ -562,6 +572,8 @@ class BetfairClient:
                         lay_price=best_lay.get('price', 0),
                         back_size=best_back.get('size', 0),
                         lay_size=best_lay.get('size', 0),
+                        back_liquidity_top3=back_liq_top3,
+                        lay_liquidity_top3=lay_liq_top3,
                         last_traded=runner.get('lastPriceTraded', 0),
                         timestamp=timestamp
                     )
