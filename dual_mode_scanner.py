@@ -59,6 +59,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 from src.data.gamma_client import GammaAPIClient, MarketFilters
 from src.data.betfair_client import BetfairClient, BetfairEndpoint
 from src.data.sx_bet_client import SXBetClient, SXBetCategory
+from src.execution.clob_executor import PolymarketCLOBExecutor
 from config.betfair_event_types import SPORTS_EVENT_TYPES, SPORTS_KEYWORDS
 
 # Import LLM matcher
@@ -150,6 +151,13 @@ class DualArbitrageScanner:
         self.polymarket = GammaAPIClient()
         self.betfair: Optional[BetfairClient] = None
         self.sxbet: Optional[SXBetClient] = None
+        self.clob: Optional[PolymarketCLOBExecutor] = None
+        
+        # Initialize CLOB for orderbook checks (public access)
+        poly_host = os.getenv('POLY_HOST', 'https://clob.polymarket.com')
+        # Use a dummy key if NO private key provided (just for scanning)
+        poly_key = os.getenv('PRIVATE_KEY', '0x' + '0'*64)
+        self.clob = PolymarketCLOBExecutor(host=poly_host, key=poly_key)
         
         # LLM Sports Matcher (only if enabled)
         self.sports_matcher: Optional[SportsMarketMatcher] = None
@@ -166,6 +174,10 @@ class DualArbitrageScanner:
             else:
                 logger.warning("⚠️ LLM requested but no API key - using keyword matching")
                 self.use_llm = False
+        
+        # WSS Managers
+        self.poly_wss: Optional[PolyWSSManager] = None
+        self.bf_wss: Optional[BetfairStreamManager] = None
         
         # Results
         self.sports_opportunities: List[ArbitrageOpportunity] = []
@@ -1002,6 +1014,30 @@ async def main():
         type=float,
         default=500.0,
         help='Minimum market liquidity in $ (default: 500)'
+    )
+    parser.add_argument(
+        '--poly-fee-pct',
+        type=float,
+        default=0.5,
+        help='Polymarket fee percentage (default: 0.5)'
+    )
+    parser.add_argument(
+        '--betfair-commission-pct',
+        type=float,
+        default=6.5,
+        help='Betfair commission percentage (default: 6.5)'
+    )
+    parser.add_argument(
+        '--gas-fee-pct',
+        type=float,
+        default=0.0,
+        help='Estimated gas fee percentage (default: 0.0)'
+    )
+    parser.add_argument(
+        '--slippage-pct',
+        type=float,
+        default=0.0,
+        help='Slippage buffer percentage (default: 0.0)'
     )
     parser.add_argument(
         '--poly-fee-pct',
