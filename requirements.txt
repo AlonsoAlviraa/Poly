@@ -7,7 +7,9 @@ gurobipy>=10.0.0 # Optional, falls back to CBC in PuLP
 # Data & Networking
 websockets>=11.0
 httpx>=0.24.0
+curl_cffi>=0.5.0
 pandas>=2.0.0
+influxdb-client>=1.36.0
 
 # Protocol / Web3
 eth-account>=0.8.0

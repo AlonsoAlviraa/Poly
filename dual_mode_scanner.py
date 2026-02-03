@@ -58,6 +58,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 from src.data.gamma_client import GammaAPIClient, MarketFilters
 from src.data.betfair_client import BetfairClient, BetfairEndpoint
 from src.data.sx_bet_client import SXBetClient, SXBetCategory
+from src.execution.clob_executor import PolymarketCLOBExecutor
 from config.betfair_event_types import SPORTS_EVENT_TYPES, SPORTS_KEYWORDS
 
 # Import LLM matcher
@@ -65,6 +66,8 @@ from src.arbitrage.sports_matcher import SportsMarketMatcher, SportsMatch
 from src.data.dual_lane_resolver import SlowLaneWorker
 from src.utils.audit_logger import AuditLogger
 from src.ui import TerminalDashboard
+from src.data.wss_manager import PolyWSSManager, BetfairStreamManager
+from src.data.price_logger import ticker_logger
 
 
 @dataclass
@@ -114,6 +117,7 @@ class DualArbitrageScanner:
                  use_llm: bool = False,
                  skip_prefilter: bool = False,
                  debug_math: bool = False,
+                 min_liquidity_depth: float = 500.0,
                  force_match_team: Optional[str] = None,
                  poly_fee_pct: float = 0.5,
                  betfair_commission_pct: float = 6.5,
@@ -134,6 +138,7 @@ class DualArbitrageScanner:
         self.use_llm = use_llm
         self.skip_prefilter = skip_prefilter
         self.debug_math = debug_math
+        self.min_liquidity_depth = min_liquidity_depth
         self.force_match_team = force_match_team
         self.poly_fee_pct = poly_fee_pct
         self.betfair_commission_pct = betfair_commission_pct
@@ -149,6 +154,13 @@ class DualArbitrageScanner:
         self.polymarket = GammaAPIClient()
         self.betfair: Optional[BetfairClient] = None
         self.sxbet: Optional[SXBetClient] = None
+        self.clob: Optional[PolymarketCLOBExecutor] = None
+        
+        # Initialize CLOB for orderbook checks (public access)
+        poly_host = os.getenv('POLY_HOST', 'https://clob.polymarket.com')
+        # Use a dummy key if NO private key provided (just for scanning)
+        poly_key = os.getenv('PRIVATE_KEY', '0x' + '0'*64)
+        self.clob = PolymarketCLOBExecutor(host=poly_host, key=poly_key)
         
         # LLM Sports Matcher (only if enabled)
         self.sports_matcher: Optional[SportsMarketMatcher] = None
@@ -166,6 +178,10 @@ class DualArbitrageScanner:
                 logger.warning("⚠️ LLM requested but no API key - using keyword matching")
                 self.use_llm = False
         
+        # WSS Managers
+        self.poly_wss: Optional[PolyWSSManager] = None
+        self.bf_wss: Optional[BetfairStreamManager] = None
+        
         # Results
         self.sports_opportunities: List[ArbitrageOpportunity] = []
         self.politics_opportunities: List[ArbitrageOpportunity] = []
@@ -179,7 +195,8 @@ class DualArbitrageScanner:
             'sports_opportunities': 0,
             'politics_opportunities': 0,
             'llm_matches': 0,
-            'keyword_matches': 0
+            'keyword_matches': 0,
+            'liq_gatekeeper_blocks': 0
         }
 
     def _apply_fee_stripping(self, spread_signed_pct: float) -> Dict[str, float]:
@@ -202,6 +219,109 @@ class DualArbitrageScanner:
         self.recent_events = self.recent_events[-5:]
         if self.dashboard:
             self.dashboard.update_events(self.recent_events)
+
+    def _check_liquidity_gatekeeper(self, platform: str, market_id: str, side: str, price_obj: Optional[Any] = None) -> bool:
+        """
+        Enforce Liquidity Gatekeeper: At least $500 in top 3 levels.
+        side: 'BUY' or 'SELL' from OUR perspective.
+        """
+        try:
+            liquidity = 0.0
+            
+            if platform == 'polymarket' and self.clob:
+                # For Poly, we use the CLOB executor to get the book
+                book = self.clob.get_order_book(market_id)
+                # If we BUY, we hit the ASKS. If we SELL, we hit the BIDS.
+                levels = book.get('asks' if side == 'BUY' else 'bids', [])
+                
+                for i, level in enumerate(levels[:3]):
+                    # volume = price * size
+                    p = float(level.get('price', 0))
+                    s = float(level.get('size', 0))
+                    liquidity += p * s
+                    
+            elif platform == 'betfair' and price_obj:
+                # For Betfair, we already have depth in the price_obj
+                # If we BUY, we need BACK liquidity. If we SELL (LAY), we need LAY liquidity.
+                if side == 'BUY':
+                    liquidity = price_obj.back_liquidity_top3
+                else:
+                    liquidity = price_obj.lay_liquidity_top3
+            
+            is_ok = liquidity >= self.min_liquidity_depth
+            if not is_ok:
+                logger.debug(f"[Gatekeeper] REJECTED {platform} {market_id}: ${liquidity:.2f} < ${self.min_liquidity_depth:.2f}")
+            return is_ok
+            
+        except Exception as e:
+            logger.error(f"Error in gatekeeper check: {e}")
+            return False
+
+    async def _on_wss_update(self, platform: str, data: Dict):
+        """Unified callback for WSS updates."""
+        # logger.debug(f"[WSS] Update from {platform}")
+        
+        # 1. Log to InfluxDB (The Black Box)
+        if platform == "polymarket":
+            # Example message format check needed, but typically has price/size
+            # For brevity, we assume standard clob update
+            ticker_logger.log_tick(
+                platform=platform,
+                market_id=data.get("market"),
+                price=data.get("price", 0),
+                size=data.get("size", 0),
+                side=data.get("side", "unknown")
+            )
+        elif platform == "betfair":
+            # Betfair mcm format parsing
+            for cm in data.get("mc", []):
+                mid = cm.get("id")
+                for rc in cm.get("rc", []):
+                    # Runner change
+                    for selection_id, prices in rc.get("atb", {}).items():
+                        # Available to Back
+                        ticker_logger.log_tick(
+                            platform=platform,
+                            market_id=mid,
+                            price=prices[0] if prices else 0,
+                            size=0, # size not always in same field
+                            side="BACK",
+                            runner_name=str(selection_id)
+                        )
+        
+        # 2. Trigger re-scan of the affected market (Codex)
+        pass
+
+    async def start_streaming(self, mode: str = 'sports'):
+        """Start real-time streaming mode."""
+        logger.info(f"🚀 Starting Real-Time Streaming Mode ({mode})...")
+        
+        if mode in ['sports', 'both']:
+            # Discovery first to get tokens
+            poly_sports = await self.get_polymarket_sports()
+            token_ids = []
+            for m in poly_sports:
+                tid = m.get('conditionId') or m.get('condition_id') or m.get('id')
+                if tid: token_ids.append(tid)
+            
+            # 1. Start Polymarket WSS
+            self.poly_wss = PolyWSSManager(token_ids[:50], self._on_wss_update) # Limit for stability
+            await self.poly_wss.connect()
+            
+            # 2. Start Betfair Stream (requires session)
+            if self.betfair and self.betfair.is_authenticated:
+                # We'd need market IDs here, typically found during matching
+                # For demo, we just connect. Real sub happens after first match.
+                self.bf_wss = BetfairStreamManager(
+                    self.betfair._session.ssoid, 
+                    self.betfair.app_key, 
+                    self._on_wss_update
+                )
+                await self.bf_wss.connect()
+        
+        logger.info("📡 Streaming active. Waiting for push events...")
+        while True:
+            await asyncio.sleep(1)
 
     async def run_force_test(self):
         """Run a forced test scenario to validate math without external APIs."""
@@ -629,11 +749,28 @@ class DualArbitrageScanner:
                                 notes=f"LLM Match ({match.source}): {match.betfair_event_name}, Conf: {match.confidence:.0%}"
                             )
 
-                            opportunities.append(opp)
-                            logger.info(f"\n🎯 OPPORTUNITY via {match.source.upper()}:")
-                            logger.info(f"{opp}")
-                            self._record_event(f"OPP {match.poly_question[:24]} | Net {net_spread_pct:.2f}%")
-                            trace.final_status = "PASS"
+                            # --- LIQUIDITY GATEKEEPER ---
+                            # Check BOTH sides of the trade
+                            # Direction: buy_poly_sell_bf OR buy_bf_sell_poly
+                            poly_side = 'BUY' if opp.direction == 'buy_poly_sell_bf' else 'SELL'
+                            bf_side = 'SELL' if opp.direction == 'buy_poly_sell_bf' else 'BUY'
+                            
+                            logger.info(f"--- [Gatekeeper] Checking depth: Poly {poly_side} | BF {bf_side}")
+                            
+                            poly_ok = self._check_liquidity_gatekeeper('polymarket', match.poly_id, poly_side)
+                            bf_ok = self._check_liquidity_gatekeeper('betfair', bf_market.market_id, bf_side, target_price)
+                            
+                            if poly_ok and bf_ok:
+                                opportunities.append(opp)
+                                logger.info(f"\n🎯 OPPORTUNITY via {match.source.upper()}:")
+                                logger.info(f"{opp}")
+                                self._record_event(f"OPP {match.poly_question[:24]} | Net {net_spread_pct:.2f}%")
+                                trace.final_status = "PASS"
+                            else:
+                                self.stats['liq_gatekeeper_blocks'] += 1
+                                logger.warning(f"--- [Gatekeeper] REJECTED: Insufficient depth (Poly: {poly_ok}, BF: {bf_ok})")
+                                trace.add_step("LiquidityGate", "FAIL", f"Depth check failed: Poly={poly_ok}, BF={bf_ok}")
+                                trace.final_status = "FAIL"
                         else:
                             logger.info("--- Status: REJECTED (Min profit not met)")
                             if net_spread_pct > 0.01:
