@@ -25,6 +25,7 @@ load_dotenv()
 
 from src.data.dual_lane_resolver import DualLaneResolver
 from src.arbitrage.market_mapper import OutcomeMapper
+from src.utils.text_utils import clean_entity_name, get_clean_tokens
 
 # Fuzzy matching - 1000x faster than LLM for simple cases
 try:
@@ -216,38 +217,9 @@ class SportsMarketMatcher:
     
     def _get_clean_tokens(self, text: str) -> set:
         """
-        Aggressive tokenization & Normalization:
-        1. Remove known prefixes/suffixes (Esports, Leagues)
-        2. Lowercase & remove non-alphanumeric
-        3. Remove stopwords
+        Use centralized utility for aggressive tokenization & Normalization.
         """
-        text = text.lower()
-        
-        # 1. Remove Prefixes/Suffixes
-        noise_patterns = [
-            r'valorant:', r'cs:go:', r'counter-strike:', r'lol:', r'dota 2:', 
-            r'nba:', r'nfl:', r'nhl:', r'mlb:', r'epl:',
-            r'bo3', r'bo5', r'map \d', r'game \d', r'round \d'
-        ]
-        for p in noise_patterns:
-            text = re.sub(p, '', text)
-            
-        # 2. Broad stopword list for sports context
-        STOP_WORDS = {
-            'will', 'win', 'on', 'the', 'vs', 'v', 'fc', 'sc', 'spread', 'game', 'match',
-            'bet', 'odds', 'score', 'team', 'club', 'united', 'city', 'real', 'soccer',
-            'football', 'basket', 'points', 'goals', 'over', 'under', 'total', 'handicap',
-            'and', 'or', 'for', 'to', 'be', 'is', 'at', 'by', 'of', 'a', 'an', 'this',
-            '2024', '2025', '2026', '2027', '2028',
-            'first', 'second', 'third', 'quarter', 'half', 'period', 'championship', 'league',
-            'receiving', 'yards', 'assists', 'rebounds', 'player', 'props'
-        }
-        
-        # 3. Clean & Split
-        clean_text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
-        tokens = set(clean_text.split())
-        
-        return tokens - STOP_WORDS
+        return get_clean_tokens(text)
     
     def _entity_guardrail(self, poly_question: str, bf_event_name: str) -> tuple:
         """

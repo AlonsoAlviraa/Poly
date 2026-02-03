@@ -23,6 +23,9 @@ from src.utils.metrics import MetricsServer
 from src.risk.circuit_breaker import CircuitBreaker
 from src.risk.position_sizer import KellyPositionSizer
 from src.observer_mode import ObserverMode
+from src.ui.terminal_dashboard import TerminalDashboard
+from src.data.wss_manager import MarketUpdate, PolymarketStream, BetfairStream
+from src.data.betfair_client import BetfairClient # For session management
 
 import numpy as np
 
@@ -85,12 +88,48 @@ class QuantArbitrageEngine:
         min_profit_env = float(os.getenv("MIN_NET_PROFIT", 0.15))
         
         self.router = SmartRouter(self.executor_client, rpc_urls=rpc_urls, metrics_server=self.metrics, min_profit=min_profit_env)
+        self.min_liquidity_depth = 500.0 # Task 3 Threshold
+        
+        # 4. TUI (Task 4)
+        self.dashboard = None
+        if os.getenv("USE_TUI", "FALSE").upper() == "TRUE":
+            self.dashboard = TerminalDashboard()
+            self.dashboard.start()
+        
+        # 4. WebSocket Streams (Task 1)
+        self.poly_stream = None
+        self.bf_stream = None
+        self.use_wss = os.getenv("USE_WEBSOCKETS", "FALSE").upper() == "TRUE"
         
         audit_logger.info("ENGINE_STARTUP", dry_run=self.dry_run, status="INITIALIZED", rpcs=len(rpc_urls), min_profit=min_profit_env, real_exec=real_exec)
 
     async def run(self):
         audit_logger.info("LOOP_START", port=8000)
         
+        if self.use_wss:
+            # Discovery tokens & markets (simplified for demo)
+            # In a real scenario, we'd fetch these from Gamma/Discovery
+            token_ids = self.active_market_ids or ["0x..."] 
+            market_ids = [] # To be filled by Discovery
+            
+            # Instantiate Streams
+            self.poly_stream = PolymarketStream(token_ids)
+            
+            # Setup Betfair Session
+            bf_client = BetfairClient()
+            if await bf_client.login():
+                self.bf_stream = BetfairStream(bf_client._session.ssoid, bf_client.app_key)
+            
+            # Subscribe (Pub/Sub Pattern)
+            if self.poly_stream: self.poly_stream.subscribe(self.router.handle_market_update)
+            if self.bf_stream: self.bf_stream.subscribe(self.router.handle_market_update)
+            
+            # Connect
+            if self.poly_stream: await self.poly_stream.connect()
+            if self.bf_stream: await self.bf_stream.connect(market_ids)
+            
+            audit_logger.info("📡 Real-Time Streams WIRING COMPLETE")
+
         while True:
             try:
                 # RISK CHECK
@@ -100,8 +139,18 @@ class QuantArbitrageEngine:
                     continue
 
                 # ... (Mock Cycle similar to previous) ...
-                # Use logging and metrics inside cycle.
-                await self._process_mock_cycle()
+                # Use polling only if WSS is NOT active
+                if not self.use_wss:
+                    await self._process_mock_cycle()
+
+                # Update Dashboard
+                if self.dashboard:
+                    self.dashboard.update_summary(
+                        balance=self.breaker.state.get('current_balance', 0.0),
+                        pnl_daily=0.0, # Placeholder
+                        exposure=0.0   # Placeholder
+                    )
+                    self.dashboard.update_websocket_status("active" if self.use_wss else "polling")
 
                 await asyncio.sleep(5)
             except KeyboardInterrupt:
@@ -111,6 +160,22 @@ class QuantArbitrageEngine:
                 self.metrics.fill_rate_counter.labels(status='failed').inc()
                 await asyncio.sleep(5)
     
+    def _check_liquidity_gatekeeper(self, market_id: str, side: str) -> bool:
+        """Task 3: Enforce $500 threshold in top 3 levels."""
+        if not self.data_client: return True
+        try:
+            book = self.data_client.get_order_book(market_id)
+            levels = book.get('asks' if side == 'BUY' else 'bids', [])
+            liquidity = sum(float(l.get('price', 0)) * float(l.get('size', 0)) for l in levels[:3])
+            
+            is_ok = liquidity >= self.min_liquidity_depth
+            if not is_ok:
+                audit_logger.warning("GATEKEEPER_REJECT", market_id=market_id, liquidity=liquidity, threshold=self.min_liquidity_depth)
+            return is_ok
+        except Exception as e:
+            audit_logger.error("GATEKEEPER_ERROR", error=str(e))
+            return False
+
     async def _process_mock_cycle(self):
         """
         Executes one full cycle. 
@@ -229,6 +294,7 @@ class QuantArbitrageEngine:
             if not self.polytope:
                 self.polytope = MarginalPolytope(n_conditions=len(theta), constraints=constraints)
 
+
         # 2. Math Core (Detection)
         if not self.polytope: return
 
@@ -308,7 +374,13 @@ class QuantArbitrageEngine:
         if not legs: 
             return
 
-        # 4. Execution (Smart Router FSM)
+        # 4. Liquidity Gatekeeper (Task 3)
+        for i, leg in enumerate(legs):
+            if not self._check_liquidity_gatekeeper(leg['token_id'], leg['side']):
+                audit_logger.warning("SKIP_TRADE_LOW_LIQUIDITY", leg=i)
+                return
+
+        # 5. Execution (Smart Router FSM)
         # Assuming Payout=1.0 * Size (if balanced). 
         # Simplified: Expected Payout = Sum(Size * 1.0) for the bundle?
         # Only if we buy A and B.
@@ -344,18 +416,26 @@ class QuantArbitrageEngine:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--mode", type=str, choices=["live", "paper", "observer"], default="paper")
+    parser.add_argument("--use-websockets", action="store_true")
+    parser.add_argument("--record-db", action="store_true")
+    parser.add_argument("--tui", action="store_true")
     args = parser.parse_args()
     
-    mode = os.getenv("MODE", "TRADING").upper()
+    # Map CLI to Env
+    os.environ["MODE"] = args.mode.upper()
+    if args.use_websockets: os.environ["USE_WEBSOCKETS"] = "TRUE"
+    if args.record_db: os.environ["RECORD_DB"] = "TRUE"
+    if args.tui: os.environ["USE_TUI"] = "TRUE"
     
-    if mode == "OBSERVER":
+    if args.mode.upper() == "OBSERVER":
         observer = ObserverMode()
         try:
             asyncio.run(observer.start())
         except KeyboardInterrupt:
             pass
     else:
-        engine = QuantArbitrageEngine(dry_run=args.dry_run)
+        engine = QuantArbitrageEngine(dry_run=(args.mode == "paper" or args.dry_run))
         try:
             asyncio.run(engine.run())
         except KeyboardInterrupt:
