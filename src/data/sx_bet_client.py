@@ -61,7 +61,6 @@ class SXBetCategory(Enum):
 class SXBetMarket:
     """Representation of an SX Bet market."""
     market_hash: str
-    market_hash: str
     label: str
     market_key: str # Added for semantic filtering (e.g. 'game_winner')
     sport_label: str
@@ -437,6 +436,21 @@ class SXBetClient:
                 
         except Exception as e:
             logger.error(f"Error fetching SX orders: {e}")
+            # Recover from closed connector/session
+            if self._session and self._session.closed:
+                self._session = None
+                try:
+                    session = await self._get_session()
+                    async with session.get(f"{self.BASE_URL}/orders", timeout=30) as response:
+                        self.stats['api_calls'] += 1
+                        if response.status != 200:
+                            logger.error(f"SX Bet orders API error: {response.status}")
+                            return
+                        data = await response.json()
+                        self._orders_cache = data.get("data", [])
+                        self._orders_cache_time = now
+                except Exception as retry_exc:
+                    logger.error(f"Error fetching SX orders after retry: {retry_exc}")
     
     async def get_orderbook(self, market_hash: str) -> SXBetOrderbook:
         """

@@ -9,7 +9,7 @@ import time
 import bisect
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,6 +18,7 @@ load_dotenv()
 from src.arbitrage.arbitrage_validator import ArbitrageValidator
 from src.arbitrage.entity_resolver_logic import date_blocker, static_matcher, get_resolver
 from src.arbitrage.ai_mapper import get_ai_mapper
+from src.arbitrage.ml_match_classifier import HybridMatchClassifier
 from src.utils.sx_normalizer import SXNormalizer
 
 # Attempt Vector Matcher import
@@ -25,6 +26,11 @@ try:
     from src.arbitrage.vector_matcher import VectorMatcher
 except ImportError:
     VectorMatcher = None
+
+try:
+    from thefuzz import fuzz
+except ImportError:
+    fuzz = None
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +44,10 @@ class CrossPlatformMapper:
         self.resolver = get_resolver() # CACHE LAYER
         self.ai_mapper = get_ai_mapper() 
         self.vector_matcher = VectorMatcher() if VectorMatcher else None
+        self._token_cache: Dict[str, set] = {}
+        self._negative_match_cache: Dict[Tuple[str, str], bool] = {}
+        self._prompted_cache: Dict[Tuple[str, str], bool] = {}
+        self._ml_classifier = HybridMatchClassifier.load_if_available()
         
         self.stats = {
             'mapping_attempts': 0,
@@ -75,6 +85,14 @@ class CrossPlatformMapper:
                 queue.append(entry)
                 with open(queue_path, 'w', encoding='utf-8') as f:
                     json.dump(queue, f, indent=2)
+            self._persist_temporal_event({
+                "type": "near_miss",
+                "poly_name": entry["poly_name"],
+                "bf_candidate": entry["bf_candidate"],
+                "bf_market_id": entry["bf_market_id"],
+                "score": score,
+                "sport": sport,
+            })
         except Exception as e:
             logger.warning(f"Failed to harvest orphan: {e}")
 
@@ -94,7 +112,13 @@ class CrossPlatformMapper:
         """
         self.stats['mapping_attempts'] += 1
         poly_question = poly_market.get('question', '')
-        poly_id = poly_market.get('id', '')
+        poly_question_low = poly_question.lower()
+        poly_id = str(poly_market.get('id', ''))
+        resolver = self._get_market_resolver(poly_question)
+        poly_fingerprint = poly_market.get('_market_fingerprint') or self._market_fingerprint_from_text(
+            poly_question, market_type=poly_market.get('market_type')
+        )
+        poly_market['_market_fingerprint'] = poly_fingerprint
         
         # --- 1. DATE BLOCKER ---
         candidates = self._apply_date_blocker(poly_market, betfair_events, bf_buckets)
@@ -116,9 +140,21 @@ class CrossPlatformMapper:
         # --- 2. STATIC MATCHER ---
         for ev in candidates:
             bf_name = ev.get('name') or ev.get('event_name', '')
+            bf_id = str(ev.get('id') or ev.get('market_id') or '')
+            if poly_id and bf_id and self._negative_match_cache.get((poly_id, bf_id)):
+                continue
+
+            ev_fingerprint = ev.get('_market_fingerprint') or self._market_fingerprint_from_text(
+                bf_name, market_type=ev.get('market_type')
+            )
+            ev['_market_fingerprint'] = ev_fingerprint
+            if poly_fingerprint and ev_fingerprint and poly_fingerprint != ev_fingerprint:
+                continue
             
             # Anti-Hallucination: Both teams must have some overlap
-            if not self._verify_team_overlap(poly_question.lower(), bf_name.lower(), sport_category):
+            if not self._verify_team_overlap(poly_question_low, bf_name.lower(), sport_category, allow_fuzzy=False):
+                if poly_id and bf_id:
+                    self._negative_match_cache[(poly_id, bf_id)] = True
                 continue
 
             match_status = static_matcher(poly_question, bf_name, sport_category)
@@ -128,16 +164,27 @@ class CrossPlatformMapper:
                 if not self._sport_cross_check(poly_market, ev, sport_category):
                     continue
                 
-                if not self._is_semantically_compatible(poly_question, ev):
+                if not resolver["semantic_check"](poly_question, ev):
                     continue
 
-                sel_id, sel_name = self._resolve_selection(poly_question, ev.get('runners', []), sport_category)
+                sel_id, sel_name = resolver["selection_resolver"](poly_question, ev.get('runners', []), sport_category)
                 
                 # PERSISTENCE (Agent Memory): Save static match to avoid recalculation/splitting overhead
                 self.resolver.add_mapping(canonical=poly_question, alias=bf_name, sport_category=sport_category)
                 # self.resolver.save_mappings() # Optional: Save immediately or let cache manager handle it
                 
-                return self._create_mapping(poly_market, ev, bf_name, 1.0, 'static_v2', sel_id, sel_name, sport_category)
+                mapping = self._create_mapping(poly_market, ev, bf_name, 1.0, 'static_v2', sel_id, sel_name, sport_category)
+                self._persist_temporal_event({
+                    "type": "match",
+                    "poly_id": poly_id,
+                    "bf_market_id": mapping.betfair_market_id,
+                    "bf_event_id": mapping.betfair_event_id,
+                    "fingerprint": poly_fingerprint,
+                    "confidence": mapping.confidence,
+                    "source": mapping.source,
+                    "sport": sport_category,
+                })
+                return mapping
 
         # --- 3. CACHE CHECK (RESOLVER) ---
         # Check if we already resolved this Polygon question to ANY of the candidates
@@ -159,17 +206,28 @@ class CrossPlatformMapper:
                     matched_ev = next((e for e in candidates if str(e.get('id','')) == str(meta['id'])), None)
                     if matched_ev:
                         # Anti-Hallucination
-                        if not self._verify_team_overlap(poly_question.lower(), meta['name'].lower(), sport_category):
+                        if not self._verify_team_overlap(poly_question_low, meta['name'].lower(), sport_category, allow_fuzzy=False):
                             continue
                         if not self._sport_cross_check(poly_market, matched_ev, sport_category):
                             continue
                         
-                        if not self._is_semantically_compatible(poly_question, matched_ev):
+                        if not resolver["semantic_check"](poly_question, matched_ev):
                             continue
 
                         self.stats['vector_hits'] += 1
-                        sel_id, sel_name = self._resolve_selection(poly_question, matched_ev.get('runners', []), sport_category)
-                        return self._create_mapping(poly_market, matched_ev, meta['name'], score, 'vector', sel_id, sel_name, sport_category)
+                        sel_id, sel_name = resolver["selection_resolver"](poly_question, matched_ev.get('runners', []), sport_category)
+                        mapping = self._create_mapping(poly_market, matched_ev, meta['name'], score, 'vector', sel_id, sel_name, sport_category)
+                        self._persist_temporal_event({
+                            "type": "match",
+                            "poly_id": poly_id,
+                            "bf_market_id": mapping.betfair_market_id,
+                            "bf_event_id": mapping.betfair_event_id,
+                            "fingerprint": poly_fingerprint,
+                            "confidence": mapping.confidence,
+                            "source": mapping.source,
+                            "sport": sport_category,
+                        })
+                        return mapping
 
         # --- 5. AI AUTO-MAPPER (LLM) ---
         # Only proceed if we have candidates and AI is enabled
@@ -179,16 +237,29 @@ class CrossPlatformMapper:
             
             for ev in top_candidates[:3]:
                 bf_name = ev.get('name', '')
+                low_conf_queue = ev.get('_pre_rank_jaccard', 0.0) < 0.15
                 
                 # Check negative cache if possible? (Resolver doesn't support it yet)
                 
                 # --- 5.1 SEMANTIC & TEAM CHECK ---
-                poly_question_low = poly_question.lower()
-                if not self._is_semantically_compatible(poly_question, ev):
+                if not resolver["semantic_check"](poly_question, ev):
                     continue
 
-                if not self._verify_team_overlap(poly_question_low, bf_name.lower(), sport_category):
-                    continue
+                if not self._verify_team_overlap(poly_question_low, bf_name.lower(), sport_category, allow_fuzzy=low_conf_queue):
+                    bf_id = str(ev.get('id') or ev.get('market_id') or '')
+                    if poly_id and bf_id:
+                        prompted_key = (poly_id, bf_id)
+                        prompted_result = self._prompted_cache.get(prompted_key)
+                        if prompted_result is None:
+                            is_match, confidence = await self.ai_mapper.check_similarity(poly_question, bf_name, sport_category)
+                            prompted_result = is_match and confidence >= 0.92
+                            self._prompted_cache[prompted_key] = prompted_result
+                        if not prompted_result:
+                            ml_score = self._ml_classifier.predict_proba(poly_question, bf_name)
+                            if ml_score < 0.75:
+                                continue
+                    else:
+                        continue
 
                 # Sport Cross-Check again
                 if not self._sport_cross_check(poly_market, ev, sport_category):
@@ -201,8 +272,19 @@ class CrossPlatformMapper:
                     self.resolver.save_mappings() # Persist immediate
                     
                     self.stats['ai_hits'] += 1
-                    sel_id, sel_name = self._resolve_selection(poly_question, ev.get('runners', []), sport_category)
-                    return self._create_mapping(poly_market, ev, bf_name, confidence, 'ai_auto_mapper', sel_id, sel_name, sport_category)
+                    sel_id, sel_name = resolver["selection_resolver"](poly_question, ev.get('runners', []), sport_category)
+                    mapping = self._create_mapping(poly_market, ev, bf_name, confidence, 'ai_auto_mapper', sel_id, sel_name, sport_category)
+                    self._persist_temporal_event({
+                        "type": "match",
+                        "poly_id": poly_id,
+                        "bf_market_id": mapping.betfair_market_id,
+                        "bf_event_id": mapping.betfair_event_id,
+                        "fingerprint": poly_fingerprint,
+                        "confidence": mapping.confidence,
+                        "source": mapping.source,
+                        "sport": sport_category,
+                    })
+                    return mapping
         
         # --- 6. ORPHAN HARVESTING (The Collector) ---
         # If we reached here, NO match was found (returns None).
@@ -295,6 +377,8 @@ class CrossPlatformMapper:
         p_slug = str(poly.get('slug', '')).lower()
         p_cat = str(poly.get('category', '')).lower()
         bf_name = str(bf_ev.get('name', '')).lower()
+        bf_comp = str(bf_ev.get('competition', '')).lower()
+        bf_region = str(bf_ev.get('_region_tag', '')).lower()
         
         # 1. NCAAB vs NBA
         if ('ncaab' in p_slug or 'college-basketball' in p_slug) and ('nba' in bf_name):
@@ -303,16 +387,93 @@ class CrossPlatformMapper:
             return False
         
         # 2. League consistency (Soccer)
-        leagues = ['premier-league', 'la-liga', 'serie-a', 'bundesliga', 'ligue-1', 'ucl', 'europa-league']
-        for league in leagues:
-            if league in p_slug and league.replace('-', ' ') not in bf_name:
-                # This might be too strict if BF name doesn't include league, 
-                # but usually it's in competition.
-                pass 
+        if sport_cat == 'soccer':
+            league_map = {
+                'premier-league': ['premier league', 'england premier league'],
+                'la-liga': ['la liga', 'laliga'],
+                'serie-a': ['serie a', 'italy serie a'],
+                'bundesliga': ['bundesliga'],
+                'ligue-1': ['ligue 1', 'ligue1'],
+                'ucl': ['champions league', 'uefa champions league'],
+                'europa-league': ['europa league', 'uefa europa league'],
+            }
+            for league_key, league_names in league_map.items():
+                if league_key in p_slug or any(name in p_slug for name in league_names):
+                    if bf_comp:
+                        if not any(name in bf_comp for name in league_names):
+                            return False
+                    else:
+                        # No competition label; keep soft pass but log if needed
+                        pass
+
+        # 3. Hard filter when competition is available
+        if bf_comp:
+            league_tokens = {
+                'nba': ['nba'],
+                'wnba': ['wnba'],
+                'ncaa': ['ncaa', 'college'],
+                'atp': ['atp'],
+                'wta': ['wta'],
+                'mlb': ['mlb', 'major league'],
+                'nfl': ['nfl'],
+                'nhl': ['nhl', 'hockey'],
+            }
+            for key, tokens in league_tokens.items():
+                if any(t in p_slug or t in p_cat for t in tokens):
+                    if not any(t in bf_comp for t in tokens):
+                        return False
+
+        # 4. Region/geography consistency (batch-merge guardrail)
+        if bf_region:
+            region_tokens = {
+                'england': ['england', 'premier league', 'efl', 'fa cup'],
+                'spain': ['spain', 'la liga', 'laliga', 'copa del rey'],
+                'italy': ['italy', 'serie a', 'coppa italia'],
+                'germany': ['germany', 'bundesliga', 'dfb'],
+                'france': ['france', 'ligue 1', 'ligue1'],
+                'usa': ['usa', 'mlb', 'nba', 'nfl', 'nhl', 'wnba'],
+            }
+            for region, tokens in region_tokens.items():
+                if any(t in p_slug or t in p_cat for t in tokens):
+                    if bf_region != region:
+                        return False
             
         return True
 
-    def _verify_team_overlap(self, poly_text: str, bf_text: str, sport: str) -> bool:
+    def _get_market_resolver(self, poly_q: str) -> Dict[str, Any]:
+        """Route to specialized resolvers by market type (draw, totals, spreads, BTTS)."""
+        q_low = poly_q.lower()
+        is_ou = any(x in q_low for x in ['over', 'under', 'o/u', 'total'])
+        is_spread = any(x in q_low for x in ['spread', 'handicap', 'line'])
+        is_btts = any(x in q_low for x in ['btts', 'both teams to score', 'ambos marcan'])
+        is_draw = 'draw' in q_low or 'empate' in q_low
+
+        if is_ou:
+            return {
+                "semantic_check": self._is_semantically_compatible,
+                "selection_resolver": self._resolve_over_under_selection,
+            }
+        if is_spread:
+            return {
+                "semantic_check": self._is_semantically_compatible,
+                "selection_resolver": self._resolve_spread_selection,
+            }
+        if is_btts:
+            return {
+                "semantic_check": self._is_semantically_compatible,
+                "selection_resolver": self._resolve_btts_selection,
+            }
+        if is_draw:
+            return {
+                "semantic_check": self._is_semantically_compatible,
+                "selection_resolver": self._resolve_draw_selection,
+            }
+        return {
+            "semantic_check": self._is_semantically_compatible,
+            "selection_resolver": self._resolve_winner_selection,
+        }
+
+    def _verify_team_overlap(self, poly_text: str, bf_text: str, sport: str, allow_fuzzy: bool = False) -> bool:
         """Ensure that both 'teams' or at least significant identifiers overlap."""
         import re
         # Robust split for various vs. formats
@@ -330,11 +491,29 @@ class CrossPlatformMapper:
              if " - " in t: return [s.strip() for s in t.split(" - ")]
              return [t] # No split found
 
+        def normalize_side(text: str) -> str:
+            t = text.lower().strip()
+            if sport == 'soccer':
+                t = t.replace("utd", "united")
+                t = t.replace("man city", "manchester city")
+                t = t.replace("man utd", "manchester united")
+                t = t.replace("psg", "paris saint germain")
+            return t
+
         # If bf_text (Exchange Event) looks like "A vs B", split it effectively to treat it as 2 sides
-        bf_sides = [s for part in parse_versus_format(bf_text) for s in re.split(r' vs\.? | v\.? | @ | - ', part) if len(s.strip()) > 2]
+        bf_sides = [
+            normalize_side(s)
+            for part in parse_versus_format(bf_text)
+            for s in re.split(r' vs\.? | v\.? | @ | - ', part)
+            if len(s.strip()) > 2
+        ]
         
         # Poly sides split
-        p_sides = [s.strip() for s in re.split(r' vs\.? | v\.? | @ | - ', poly_text) if len(s.strip()) > 2]
+        p_sides = [
+            normalize_side(s.strip())
+            for s in re.split(r' vs\.? | v\.? | @ | - ', poly_text)
+            if len(s.strip()) > 2
+        ]
         
         if not p_sides or not bf_sides: return True 
         
@@ -342,22 +521,34 @@ class CrossPlatformMapper:
         def get_sig_tokens(text):
             # Remove very common words, keep nouns/names
             stop = {'the', 'and', 'for', 'will', 'win', 'match', 'odds', 'ends', 'draw', 'both', 'teams', 'score', 'end'}
-            tokens = set(re.findall(r'\w+', text.lower()))
-            return tokens - stop
+            text_key = text.lower().strip()
+            cached = self._token_cache.get(text_key)
+            if cached is not None:
+                return cached
+            tokens = set(re.findall(r'\w+', text_key))
+            cleaned = tokens - stop
+            self._token_cache[text_key] = cleaned
+            return cleaned
 
         # If it's a "Vs" match (2 sides), we need overlap on both sides or a very strong single match
         matches_per_p_side = []
+        generic = {'city', 'united', 'fc', 'bc', 'real', 'st', 'st.', 'san', 'santa', 'state', 'tech', 'university', 'univ', 'college'}
+        negative_dict = {
+            'soccer': {'city', 'united', 'real', 'atletico'},
+            'basketball': {'state', 'st'},
+            'baseball': {'sox', 'state'},
+            'tennis': {'jr', 'sr'},
+        }
+        bf_tokens_list = [(bf_side, get_sig_tokens(bf_side)) for bf_side in bf_sides]
         for p_side in p_sides:
             p_tokens = get_sig_tokens(p_side)
             found_match = False
-            for bf_side in bf_sides:
-                bf_tokens = get_sig_tokens(bf_side)
+            for bf_side, bf_tokens in bf_tokens_list:
                 intersection = p_tokens & bf_tokens
                 # If they share at least one significant token
                 if intersection:
                     # Special check for generic tokens
-                    common = {'city', 'united', 'fc', 'bc', 'real', 'st', 'st.', 'san', 'santa', 'state', 'tech', 'university', 'univ', 'college'}
-                    if len(intersection) == 1 and list(intersection)[0] in common:
+                    if len(intersection) == 1 and list(intersection)[0] in generic:
                         # For common names, we need at least a partial match of the WHOLE side
                         # e.g., "Man City" vs "Manchester City" -> "city" overlaps, "man" matches "manchester"
                         # Simply check if the LONGER name contains a significant portion of the SHORTER one
@@ -374,7 +565,15 @@ class CrossPlatformMapper:
                              # "Illinois" vs "Illinois State" -> mismatch
                              found_match = False
                         else:
-                             found_match = True
+                             # Require at least one non-generic token overlap for soccer
+                             if sport == 'soccer' and intersection <= generic:
+                                 found_match = False
+                             else:
+                                 negatives = negative_dict.get(sport, set())
+                                 if negatives and ((p_tokens & negatives) ^ (bf_tokens & negatives)):
+                                     found_match = False
+                                 else:
+                                     found_match = True
                 if found_match: break
             matches_per_p_side.append(found_match)
         
@@ -383,7 +582,16 @@ class CrossPlatformMapper:
         if len(p_sides) >= 2:
             return all(matches_per_p_side)
             
-        return any(matches_per_p_side)
+        if any(matches_per_p_side):
+            return True
+
+        # Fallback: allow strong fuzzy match on full names to expand coverage
+        if allow_fuzzy and fuzz:
+            full_score = fuzz.token_set_ratio(poly_text, bf_text)
+            if full_score >= 92:
+                return True
+
+        return False
 
     def _extract_line_value(self, text: str) -> Optional[float]:
         """Extract the numeric line value from text (e.g., 2.5, -4.5, 220.5)."""
@@ -402,6 +610,47 @@ class CrossPlatformMapper:
         except:
             return None
 
+    def _market_fingerprint_from_text(self, text: str, market_type: Optional[str] = None) -> Optional[str]:
+        if not text:
+            return None
+        q_low = text.lower()
+        base_type = market_type or ''
+        if not base_type:
+            if any(x in q_low for x in ['over', 'under', 'o/u', 'total']):
+                base_type = 'TOTALS'
+            elif any(x in q_low for x in ['spread', 'handicap', 'line']):
+                base_type = 'SPREAD'
+            elif any(x in q_low for x in ['btts', 'both teams to score', 'ambos marcan']):
+                base_type = 'BTTS'
+            elif 'draw' in q_low or 'empate' in q_low:
+                base_type = 'DRAW'
+            else:
+                base_type = 'WINNER'
+
+        line = self._extract_line_value(q_low)
+        period = 'full_time'
+        if any(x in q_low for x in ['1h', '1st half', 'primer tiempo', 'first half']):
+            period = 'first_half'
+        elif any(x in q_low for x in ['2h', '2nd half', 'second half', 'segundo tiempo']):
+            period = 'second_half'
+        elif 'quarter' in q_low or 'q1' in q_low or 'q2' in q_low:
+            period = 'quarter'
+
+        if base_type in {'TOTALS', 'SPREAD'} and line is not None:
+            return f"{base_type}:{line}:{period}"
+        if base_type:
+            return f"{base_type}:{period}"
+        return None
+
+    def _persist_temporal_event(self, payload: Dict[str, Any]) -> None:
+        try:
+            os.makedirs("data/learning", exist_ok=True)
+            payload["timestamp"] = datetime.now().isoformat()
+            with open("data/learning/temporal_events.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps(payload) + "\n")
+        except Exception as exc:
+            logger.debug(f"Failed to persist temporal event: {exc}")
+
     def _create_mapping(self, poly, ev, bf_name, conf, source, selection_id=None, selection_name=None, sport="unknown"):
         return MarketMapping(
             polymarket_id=poly.get('condition_id') or poly.get('id'),
@@ -415,35 +664,65 @@ class CrossPlatformMapper:
             polymarket_slug=poly.get('slug'),
             bf_selection_id=str(selection_id) if selection_id else None,
             bf_runner_name=selection_name,
+            market_type=ev.get('market_type'),
             exchange=ev.get('exchange', 'bf'),
             sport=sport
         )
 
-    def _resolve_selection(self, poly_q: str, bf_runners: List[Dict], sport: str) -> Tuple[Optional[str], Optional[str]]:
-        """Selection Resolver with priority for special outcomes (Draw, O/U, BTTS)."""
-        if not bf_runners: return None, None
+    def _resolve_draw_selection(self, poly_q: str, bf_runners: List[Dict], sport: str) -> Tuple[Optional[str], Optional[str]]:
+        """Resolver for draw markets."""
+        if not bf_runners:
+            return None, None
+        draw_runner = next(
+            (r for r in bf_runners if 'draw' in r.get('runnerName', '').lower() or 'empate' in r.get('runnerName', '').lower()),
+            None,
+        )
+        if draw_runner:
+            return str(draw_runner.get('selectionId')), draw_runner.get('runnerName')
+        return None, None
+
+    def _resolve_btts_selection(self, poly_q: str, bf_runners: List[Dict], sport: str) -> Tuple[Optional[str], Optional[str]]:
+        """Resolver for both-teams-to-score markets."""
+        if not bf_runners:
+            return None, None
+        yes_runner = next(
+            (r for r in bf_runners if r.get('runnerName', '').lower() in {'yes', 'sí'}),
+            None,
+        )
+        if yes_runner:
+            return str(yes_runner.get('selectionId')), yes_runner.get('runnerName')
+        return None, None
+
+    def _resolve_over_under_selection(self, poly_q: str, bf_runners: List[Dict], sport: str) -> Tuple[Optional[str], Optional[str]]:
+        """Resolver for totals markets."""
+        if not bf_runners:
+            return None, None
         q_low = poly_q.lower()
-        
-        # 1. SPECIAL CASE: DRAW
-        if 'draw' in q_low or 'empate' in q_low:
-            draw_runner = next((r for r in bf_runners if 'draw' in r.get('runnerName', '').lower() or 'empate' in r.get('runnerName', '').lower()), None)
-            if draw_runner: return str(draw_runner.get('selectionId')), draw_runner.get('runnerName')
-
-        # 2. SPECIAL CASE: BOTH TEAMS TO SCORE
-        if 'both teams to score' in q_low or 'ambos marcan' in q_low:
-            # Polymarket "Yes" maps to BF 'Yes' runner
-            yes_runner = next((r for r in bf_runners if r.get('runnerName', '').lower() == 'yes' or r.get('runnerName', '').lower() == 'sí'), None)
-            if yes_runner: return str(yes_runner.get('selectionId')), yes_runner.get('runnerName')
-
-        # 3. SPECIAL CASE: OVER / UNDER
         if 'over' in q_low or 'más de' in q_low:
-            over_runner = next((r for r in bf_runners if 'over' in r.get('runnerName', '').lower() or 'más' in r.get('runnerName', '').lower()), None)
-            if over_runner: return str(over_runner.get('selectionId')), over_runner.get('runnerName')
+            over_runner = next(
+                (r for r in bf_runners if 'over' in r.get('runnerName', '').lower() or 'más' in r.get('runnerName', '').lower()),
+                None,
+            )
+            if over_runner:
+                return str(over_runner.get('selectionId')), over_runner.get('runnerName')
         if 'under' in q_low or 'menos de' in q_low:
-            under_runner = next((r for r in bf_runners if 'under' in r.get('runnerName', '').lower() or 'menos' in r.get('runnerName', '').lower()), None)
-            if under_runner: return str(under_runner.get('selectionId')), under_runner.get('runnerName')
+            under_runner = next(
+                (r for r in bf_runners if 'under' in r.get('runnerName', '').lower() or 'menos' in r.get('runnerName', '').lower()),
+                None,
+            )
+            if under_runner:
+                return str(under_runner.get('selectionId')), under_runner.get('runnerName')
+        return None, None
 
-        # 4. DEFAULT: TEAM NAME MATCHING
+    def _resolve_spread_selection(self, poly_q: str, bf_runners: List[Dict], sport: str) -> Tuple[Optional[str], Optional[str]]:
+        """Resolver for spread/handicap markets."""
+        return self._resolve_winner_selection(poly_q, bf_runners, sport)
+
+    def _resolve_winner_selection(self, poly_q: str, bf_runners: List[Dict], sport: str) -> Tuple[Optional[str], Optional[str]]:
+        """Resolver for standard match-winner markets."""
+        if not bf_runners:
+            return None, None
+        q_low = poly_q.lower()
         best_runner = None
         max_overlap = 0
         def get_sig(t):
@@ -494,6 +773,7 @@ class CrossPlatformMapper:
 
     def _apply_date_blocker(self, poly_market, betfair_events, bf_buckets=None):
         poly_date = poly_market.get('_event_date_parsed')
+        poly_region = poly_market.get('_region_tag') or 'global'
         
         # Fallback date parsing
         if not poly_date:
@@ -511,11 +791,13 @@ class CrossPlatformMapper:
         valid_candidates = []
         if bf_buckets:
             target_date = poly_date.date()
+            target_hour_bucket = poly_date.hour // 6
             candidates = (
-                bf_buckets.get(target_date, []) +
-                bf_buckets.get(target_date - timedelta(days=1), []) +
-                bf_buckets.get(target_date + timedelta(days=1), []) +
-                bf_buckets.get('NO_DATE', [])
+                bf_buckets.get((target_date, target_hour_bucket, poly_region), []) +
+                bf_buckets.get((target_date, target_hour_bucket, 'global'), []) +
+                bf_buckets.get((target_date - timedelta(days=1), target_hour_bucket, poly_region), []) +
+                bf_buckets.get((target_date + timedelta(days=1), target_hour_bucket, poly_region), []) +
+                bf_buckets.get(('NO_DATE', 'NO_TIME', 'global'), [])
             )
             # Fine-grain check: Strict for dated events, skip for undated (SX)
             valid_candidates = []
@@ -541,12 +823,22 @@ class CrossPlatformMapper:
         return valid_candidates
 
     def _pre_rank_candidates(self, poly_q: str, bf_events: List[Dict]) -> List[Dict]:
-        poly_tokens = set(poly_q.lower().split())
+        poly_tokens = self._token_cache.get(poly_q.lower())
+        if poly_tokens is None:
+            poly_tokens = set(poly_q.lower().split())
+            self._token_cache[poly_q.lower()] = poly_tokens
         scored = []
         for ev in bf_events:
             bf_name = ev.get('name') or ev.get('event_name', '')
-            bf_tokens = set(bf_name.lower().split())
-            score = len(poly_tokens.intersection(bf_tokens))
+            bf_tokens = self._token_cache.get(bf_name.lower())
+            if bf_tokens is None:
+                bf_tokens = set(bf_name.lower().split())
+                self._token_cache[bf_name.lower()] = bf_tokens
+            intersection = poly_tokens.intersection(bf_tokens)
+            union = poly_tokens.union(bf_tokens)
+            score = len(intersection)
+            jaccard = len(intersection) / max(len(union), 1)
+            ev['_pre_rank_jaccard'] = jaccard
             scored.append((score, ev))
         
         scored.sort(key=lambda x: x[0], reverse=True)

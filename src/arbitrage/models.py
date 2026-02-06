@@ -17,6 +17,7 @@ class MarketMapping:
     sx_market_id: Optional[str] = None
     bf_selection_id: Optional[str] = None
     bf_runner_name: Optional[str] = None
+    market_type: Optional[str] = None
     exchange: str = 'bf'
     sport: str = 'unknown'
     
@@ -40,6 +41,7 @@ class MarketMapping:
             'polymarket_slug': self.polymarket_slug,
             'bf_selection_id': self.bf_selection_id,
             'bf_runner_name': self.bf_runner_name,
+            'market_type': self.market_type,
             'exchange': self.exchange
         }
 

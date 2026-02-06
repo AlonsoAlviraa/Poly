@@ -33,8 +33,28 @@ class MegaAudit:
             "matches_found": 0,
             "poly_by_sport": defaultdict(int),
             "by_sport": defaultdict(int),
-            "fetched_by_sport": defaultdict(int) 
+            "fetched_by_sport": defaultdict(int),
+            "scorecards": defaultdict(lambda: defaultdict(lambda: {"fetched": 0, "matched": 0}))
         }
+
+    def _record_fetch(self, exchange: str, market_type: str):
+        self.stats["scorecards"][exchange][market_type]["fetched"] += 1
+
+    def _infer_region_tag(self, text: str) -> str:
+        t = text.lower()
+        if any(x in t for x in ['premier league', 'england', 'efl', 'fa cup']):
+            return 'england'
+        if any(x in t for x in ['la liga', 'laliga', 'spain', 'copa del rey']):
+            return 'spain'
+        if any(x in t for x in ['serie a', 'italy', 'coppa italia']):
+            return 'italy'
+        if any(x in t for x in ['bundesliga', 'germany', 'dfb']):
+            return 'germany'
+        if any(x in t for x in ['ligue 1', 'ligue1', 'france']):
+            return 'france'
+        if any(x in t for x in ['nba', 'wnba', 'mlb', 'nfl', 'nhl', 'usa']):
+            return 'usa'
+        return ''
 
     def _get_sport_id(self, name_or_slug: str) -> str:
         """Centralized sport classification logic."""
@@ -152,14 +172,17 @@ class MegaAudit:
                     'event_id': event_id,
                     'market_id': market_id,
                     'name': name,
+                    'competition': m.get('competition', {}).get('name', ''),
                     'open_date': start_time,
                     'market_type': m.get('description', {}).get('marketType', 'MATCH_ODDS'),
                     'runners': m.get('runners', []),
                     'exchange': 'bf',
                     '_sport': sport_name,
+                    '_region_tag': self._infer_region_tag(f"{name} {m.get('competition', {}).get('name', '')}"),
                     '_start_date_parsed': None
                 }
                 bf_events.append(standardized)
+                self._record_fetch('bf', standardized['market_type'])
                 
                 # Telemetry (Forced by tid)
                 sport = sport_name
@@ -197,6 +220,8 @@ class MegaAudit:
             
             ev['_sport'] = sport # Store for later stats
             self.stats["fetched_by_sport"][sport] += 1
+            self._record_fetch('sx', ev.get('market_type', 'UNKNOWN'))
+            ev['_region_tag'] = self._infer_region_tag(f"{ev.get('name', '')} {ev.get('category', '')}")
         
         # Merge all exchange events
         all_exchange_events = bf_events + sx_events
@@ -208,15 +233,18 @@ class MegaAudit:
         for event in all_exchange_events:
             start_str = event.get('open_date')
             dt_key = 'NO_DATE'
+            hour_bucket = 'NO_TIME'
             if start_str:
                 try:
                     clean_str = start_str.replace('Z', '+00:00')
                     dt = datetime.fromisoformat(clean_str)
                     event['_start_date_parsed'] = dt
                     dt_key = dt.date()
+                    hour_bucket = dt.hour // 6
                 except:
                     pass
-            exchange_buckets[dt_key].append(event)
+            region = event.get('_region_tag', '') or 'global'
+            exchange_buckets[(dt_key, hour_bucket, region)].append(event)
         
         # DEBUG: Date Parsing Stats
         sx_with_date = sum(1 for e in sx_events if e.get('_start_date_parsed'))
@@ -236,6 +264,10 @@ class MegaAudit:
                 # Telemetry
                 sport = self._get_sport_id(f"{pm.get('category', '')} {pm.get('question', '')} {pm.get('slug', '')}")
                 self.stats["poly_by_sport"][sport] += 1
+                pm['_region_tag'] = self._infer_region_tag(f"{pm.get('slug', '')} {pm.get('question', '')} {pm.get('category', '')}")
+                pm['_market_fingerprint'] = self.mapper._market_fingerprint_from_text(
+                    pm.get('question', ''), market_type=pm.get('market_type')
+                )
                 
                 # OPTIMIZATION: Sport Blocking (Relaxed based on user request)
                 # Filter 'all_exchange_events' to only include relevant sport OR unknown
@@ -262,6 +294,7 @@ class MegaAudit:
                     self.stats["matches_found"] += 1
                     self.stats["by_sport"][found_sport] += 1
                     mappings.append(m)
+                    self.stats["scorecards"][m.exchange][m.market_type or "UNKNOWN"]["matched"] += 1
                     
                     # Output formatting should be careful for parallel logs, but we'll try to keep them together
                     output = [
@@ -287,11 +320,19 @@ class MegaAudit:
                             ob = await self.sx.get_orderbook(m.betfair_market_id)
                             # Implied Odds for SX = 1 / Price
                             # To hedge a buy on Poly (Yes), we need to SELL on SX (Take Bid)
-                            # SX ROI calc uses simple cost comparison if we buy both sides, 
-                            # but let's stay consistent with "Layer" logic for the trace.
-                            best_bid = ob.best_bid
-                            if best_bid > 0:
-                                best_lay = 1.0 / best_bid
+                            # If selection is outcome two, use the complementary price.
+                            selected_price = None
+                            if ob:
+                                if m.bf_selection_id:
+                                    if str(m.bf_selection_id) == "1":
+                                        selected_price = ob.best_bid
+                                    elif str(m.bf_selection_id) == "2" and ob.best_ask > 0:
+                                        selected_price = 1.0 - ob.best_ask
+                                else:
+                                    selected_price = ob.best_bid
+
+                            if selected_price and selected_price > 0:
+                                best_lay = 1.0 / selected_price
                                 fee_rate = 0.02 # SX Commissions vary, 2% is safe
                         else:
                             # Betfair Price Logic
@@ -400,6 +441,13 @@ class MegaAudit:
         for sport, count in sorted(self.stats["by_sport"].items(), key=lambda x: x[1], reverse=True):
             fetched = self.stats["fetched_by_sport"].get(sport, 0)
             print(f"   - {sport.upper().ljust(12)}: {count} matched / {fetched} fetched")
+
+        print("\n   SCORECARDS BY SOURCE & MARKET TYPE:")
+        for exchange, market_stats in self.stats["scorecards"].items():
+            print(f"   {exchange.upper()}:")
+            for market_type, stats in sorted(market_stats.items(), key=lambda x: x[0]):
+                if stats["fetched"] or stats["matched"]:
+                    print(f"     - {market_type:<20}: {stats['matched']} matched / {stats['fetched']} fetched")
         if opportunities:
             print("\n   💰💰💰 PROFITABLE OPPORTUNITIES (ROI > 0%) 💰💰💰")
             print("   " + "="*57)
