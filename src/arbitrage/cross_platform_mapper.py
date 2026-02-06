@@ -32,6 +32,11 @@ try:
 except ImportError:
     fuzz = None
 
+try:
+    from thefuzz import fuzz
+except ImportError:
+    fuzz = None
+
 logger = logging.getLogger(__name__)
 
 from src.arbitrage.models import MarketMapping, ArbOpportunity
