@@ -555,6 +555,7 @@ class CrossPlatformMapper:
         """Resolver for standard match-winner markets."""
         if not bf_runners:
             return None, None
+        q_low = poly_q.lower()
         best_runner = None
         max_overlap = 0
         def get_sig(t):

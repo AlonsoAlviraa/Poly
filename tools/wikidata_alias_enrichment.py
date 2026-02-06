@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Wikidata alias enrichment for soccer team names.
+Wikidata alias enrichment for multi-sport entities.
 
-Fetches club labels + aliases and writes them into mapping_cache/entities.json
-under the "soccer" sport shard. This is optional and intended to be run manually.
+Fetches labels + aliases and writes them into mapping_cache/entities.json
+under the requested sport shard. This is optional and intended to be run manually.
 """
 
 import argparse
@@ -16,13 +16,22 @@ import httpx
 
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 
+SPORT_QUERIES = {
+    "soccer": "wd:Q476028",
+    "tennis": "wd:Q847",
+    "basketball": "wd:Q5372",
+    "baseball": "wd:Q5369",
+    "hockey": "wd:Q414",
+    "american_football": "wd:Q186834",
+}
+
 logger = logging.getLogger("wikidata_alias_enrichment")
 
 
-def _run_query(limit: int) -> Dict:
+def _run_query(sport_qid: str, limit: int) -> Dict:
     query = f"""
     SELECT ?club ?clubLabel ?altLabel WHERE {{
-      ?club wdt:P31/wdt:P279* wd:Q476028 .
+      ?club wdt:P31/wdt:P279* {sport_qid} .
       OPTIONAL {{ ?club skos:altLabel ?altLabel . FILTER (lang(?altLabel) IN ("en", "es")) }}
       SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en,es" . }}
     }}
@@ -33,7 +42,7 @@ def _run_query(limit: int) -> Dict:
         "User-Agent": "APU-Alias-Enrichment/1.0 (contact: local)",
     }
     with httpx.Client(timeout=30) as client:
-        response = client.get(WIKIDATA_SPARQL, params={"query": query}, headers=headers)
+        response = client.post(WIKIDATA_SPARQL, data={"query": query}, headers=headers)
         response.raise_for_status()
         return response.json()
 
@@ -53,11 +62,14 @@ def _persist_entities(path: str, entities: Dict[str, Dict[str, str]]) -> None:
     os.replace(tmp_path, path)
 
 
-def enrich_soccer_entities(entity_path: str, limit: int) -> int:
-    data = _run_query(limit)
+def enrich_entities(entity_path: str, sport: str, limit: int) -> int:
+    sport_qid = SPORT_QUERIES.get(sport)
+    if not sport_qid:
+        raise ValueError(f"Unsupported sport: {sport}")
+    data = _run_query(sport_qid, limit)
     bindings: List[Dict] = data.get("results", {}).get("bindings", [])
     entities = _load_entities(entity_path)
-    soccer_map = entities.setdefault("soccer", {})
+    sport_map = entities.setdefault(sport, {})
 
     added = 0
     for row in bindings:
@@ -66,8 +78,8 @@ def enrich_soccer_entities(entity_path: str, limit: int) -> int:
         if not label or not alt:
             continue
         key = alt.lower().strip()
-        if key and key not in soccer_map:
-            soccer_map[key] = label
+        if key and key not in sport_map:
+            sport_map[key] = label
             added += 1
 
     _persist_entities(entity_path, entities)
@@ -75,14 +87,20 @@ def enrich_soccer_entities(entity_path: str, limit: int) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Enrich soccer aliases from Wikidata.")
+    parser = argparse.ArgumentParser(description="Enrich sport aliases from Wikidata.")
     parser.add_argument("--entity-path", default="mapping_cache/entities.json")
     parser.add_argument("--limit", type=int, default=1000)
+    parser.add_argument("--sport", default="all", choices=["all"] + list(SPORT_QUERIES.keys()))
     args = parser.parse_args()
 
     try:
-        added = enrich_soccer_entities(args.entity_path, args.limit)
-        print(f"Added {added} aliases to {args.entity_path}")
+        total_added = 0
+        sports = list(SPORT_QUERIES.keys()) if args.sport == "all" else [args.sport]
+        for sport in sports:
+            added = enrich_entities(args.entity_path, sport, args.limit)
+            total_added += added
+            print(f"[{sport}] Added {added} aliases.")
+        print(f"Total added: {total_added} aliases to {args.entity_path}")
     except Exception as exc:
         logger.error("Wikidata enrichment failed: %s", exc)
         raise SystemExit(1)
