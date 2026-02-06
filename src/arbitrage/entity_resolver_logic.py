@@ -13,17 +13,22 @@ from src.data.cache_manager import CacheManager
 logger = logging.getLogger(__name__)
 
 class EntityResolverLogic:
-    def __init__(self, mappings_path: str = None):
+    def __init__(self, mappings_path: str = None, alias_overrides_path: str = None):
         if mappings_path is None:
             mappings_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'mappings.json')
         self.mappings_path = mappings_path
+        if alias_overrides_path is None:
+            alias_overrides_path = os.path.join('mapping_cache', 'alias_overrides.json')
+        self.alias_overrides_path = alias_overrides_path
         
         # Integración con el nuevo CacheManager (Seeding Layer)
         self.cache_mgr = CacheManager()
         
         self._mappings: Dict[str, Dict[str, List[str]]] = {}
+        self._alias_overrides: Dict[str, Dict[str, str]] = {}
         self._dirty = False
         self._load_mappings()
+        self._load_alias_overrides()
 
     def _load_mappings(self):
         try:
@@ -34,6 +39,29 @@ class EntityResolverLogic:
                 logger.warning(f"Mappings file not found: {self.mappings_path}")
         except Exception as e:
             logger.error(f"Error loading mappings: {e}")
+
+    def _load_alias_overrides(self):
+        try:
+            if os.path.exists(self.alias_overrides_path):
+                with open(self.alias_overrides_path, 'r', encoding='utf-8') as f:
+                    self._alias_overrides = json.load(f)
+            else:
+                self._alias_overrides = {}
+        except Exception as e:
+            logger.error(f"Error loading alias overrides: {e}")
+            self._alias_overrides = {}
+
+    def _expand_alias_tokens(self, text: str, sport: str) -> Set[str]:
+        tokens: Set[str] = set()
+        if not text or not sport:
+            return tokens
+        sport_key = sport.lower()
+        overrides = self._alias_overrides.get(sport_key, {})
+        text_low = text.lower()
+        for alias, canonical in overrides.items():
+            if alias in text_low:
+                tokens.update(canonical.lower().split())
+        return tokens
 
     def get_entity_from_cache(self, name: str, sport: str) -> Optional[str]:
         """
@@ -129,19 +157,31 @@ class EntityResolverLogic:
         # 1. Fast exact match (pre-normalization)
         if q_norm == e_norm: return "MATCH"
 
-        def get_clean_tokens(text):
+        def get_clean_tokens(text, sport: str):
             text = self.normalize_player_name(text).lower()
             # Remove ONLY very generic junk
             # "W" -> Women
-            text = re.sub(r'\b(fc|cf|sc|afc|cd|esports|club|de|the|v|vs|u21|u23|fk|sk|al|utd|united|city|town)\b', '', text)
+            base_stop = [
+                'fc', 'cf', 'sc', 'afc', 'cd', 'esports', 'club', 'de', 'the',
+                'v', 'vs', 'u21', 'u23', 'fk', 'sk', 'al', 'town'
+            ]
+            # Soccer needs discriminative tokens like "city"/"united"/"real"
+            if sport != 'soccer':
+                base_stop.extend(['utd', 'united', 'city', 'real', 'athletic'])
+            stop_pattern = r'\b(' + '|'.join(base_stop) + r')\b'
+            text = re.sub(stop_pattern, '', text)
             # Handle accents
             text = "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
             # Split on non-alphanumeric
             text = re.sub(r'[^a-z0-9]', ' ', text)
             return set(text.split())
 
-        q_tokens = get_clean_tokens(query_text)
-        e_tokens = get_clean_tokens(entity_text)
+        q_tokens = get_clean_tokens(query_text, sport_category)
+        e_tokens = get_clean_tokens(entity_text, sport_category)
+
+        # Alias overrides (JSON-driven)
+        q_tokens.update(self._expand_alias_tokens(query_text, sport_category))
+        e_tokens.update(self._expand_alias_tokens(entity_text, sport_category))
 
         synonyms = {
             "man utd": "manchester united",
@@ -160,6 +200,12 @@ class EntityResolverLogic:
         for syn, target in synonyms.items():
             if syn in q_norm_clean: q_tokens.update(target.split())
             if syn in e_norm_clean: e_tokens.update(target.split())
+
+        sport_key = sport_category.lower()
+        if q_norm_clean in self._alias_overrides.get(sport_key, {}):
+            return "MATCH"
+        if e_norm_clean in self._alias_overrides.get(sport_key, {}):
+            return "MATCH"
 
         intersection = q_tokens & e_tokens
 

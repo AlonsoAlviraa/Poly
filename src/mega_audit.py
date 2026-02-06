@@ -152,6 +152,7 @@ class MegaAudit:
                     'event_id': event_id,
                     'market_id': market_id,
                     'name': name,
+                    'competition': m.get('competition', {}).get('name', ''),
                     'open_date': start_time,
                     'market_type': m.get('description', {}).get('marketType', 'MATCH_ODDS'),
                     'runners': m.get('runners', []),
@@ -287,11 +288,18 @@ class MegaAudit:
                             ob = await self.sx.get_orderbook(m.betfair_market_id)
                             # Implied Odds for SX = 1 / Price
                             # To hedge a buy on Poly (Yes), we need to SELL on SX (Take Bid)
-                            # SX ROI calc uses simple cost comparison if we buy both sides, 
-                            # but let's stay consistent with "Layer" logic for the trace.
-                            best_bid = ob.best_bid
-                            if best_bid > 0:
-                                best_lay = 1.0 / best_bid
+                            # If selection is outcome two, use the complementary price.
+                            selected_price = None
+                            if m.bf_selection_id:
+                                if str(m.bf_selection_id) == "1":
+                                    selected_price = ob.best_bid
+                                elif str(m.bf_selection_id) == "2" and ob.best_ask > 0:
+                                    selected_price = 1.0 - ob.best_ask
+                            else:
+                                selected_price = ob.best_bid
+
+                            if selected_price and selected_price > 0:
+                                best_lay = 1.0 / selected_price
                                 fee_rate = 0.02 # SX Commissions vary, 2% is safe
                         else:
                             # Betfair Price Logic
