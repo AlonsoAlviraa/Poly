@@ -183,19 +183,6 @@ class SportsMarketMatcher:
                 logger.error("openai package not installed")
     
     def _extract_entities(self, text: str) -> set:
-        """Extract normalized sports entities from text."""
-        text_lower = text.lower()
-        entities = set()
-        
-        for entity_name, variations in self.SPORTS_ENTITIES.items():
-            for variation in variations:
-                if variation in text_lower:
-                    entities.add(entity_name)
-                    break
-        
-        return entities
-    
-    def _extract_entities(self, text: str) -> set:
         """
         Extract resolved canonical entities from text using DualLaneResolver (Fast Lane).
         Returns a set of Canonical names.

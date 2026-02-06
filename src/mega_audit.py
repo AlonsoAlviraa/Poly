@@ -152,6 +152,7 @@ class MegaAudit:
                     'event_id': event_id,
                     'market_id': market_id,
                     'name': name,
+                    'competition': m.get('competition', {}).get('name', ''),
                     'open_date': start_time,
                     'market_type': m.get('description', {}).get('marketType', 'MATCH_ODDS'),
                     'runners': m.get('runners', []),
