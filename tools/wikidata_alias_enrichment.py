@@ -4,6 +4,7 @@ Wikidata alias enrichment for multi-sport entities.
 
 Fetches labels + aliases and writes them into mapping_cache/entities.json
 under the requested sport shard. This is optional and intended to be run manually.
+By default, --sport all will skip soccer unless --include-soccer is set.
 """
 
 import argparse
@@ -70,6 +71,7 @@ def enrich_entities(entity_path: str, sport: str, limit: int) -> int:
     bindings: List[Dict] = data.get("results", {}).get("bindings", [])
     entities = _load_entities(entity_path)
     sport_map = entities.setdefault(sport, {})
+    existing_aliases = {alias for smap in entities.values() for alias in smap.keys()}
 
     added = 0
     for row in bindings:
@@ -78,6 +80,10 @@ def enrich_entities(entity_path: str, sport: str, limit: int) -> int:
         if not label or not alt:
             continue
         key = alt.lower().strip()
+        if not key or key == label.lower().strip():
+            continue
+        if key in existing_aliases:
+            continue
         if key and key not in sport_map:
             sport_map[key] = label
             added += 1
@@ -91,11 +97,14 @@ def main() -> None:
     parser.add_argument("--entity-path", default="mapping_cache/entities.json")
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--sport", default="all", choices=["all"] + list(SPORT_QUERIES.keys()))
+    parser.add_argument("--include-soccer", action="store_true", help="Include soccer when sport=all.")
     args = parser.parse_args()
 
     try:
         total_added = 0
         sports = list(SPORT_QUERIES.keys()) if args.sport == "all" else [args.sport]
+        if args.sport == "all" and not args.include_soccer:
+            sports = [s for s in sports if s != "soccer"]
         for sport in sports:
             added = enrich_entities(args.entity_path, sport, args.limit)
             total_added += added

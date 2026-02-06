@@ -26,6 +26,7 @@ class EntityResolverLogic:
         
         self._mappings: Dict[str, Dict[str, List[str]]] = {}
         self._alias_overrides: Dict[str, Dict[str, str]] = {}
+        self._alias_overrides_meta: Dict[str, str] = {}
         self._dirty = False
         self._load_mappings()
         self._load_alias_overrides()
@@ -44,12 +45,17 @@ class EntityResolverLogic:
         try:
             if os.path.exists(self.alias_overrides_path):
                 with open(self.alias_overrides_path, 'r', encoding='utf-8') as f:
-                    self._alias_overrides = json.load(f)
+                    raw = json.load(f)
+                    self._alias_overrides_meta = raw.get("_meta", {})
+                    self._alias_overrides = {
+                        k: v for k, v in raw.items() if k != "_meta"
+                    }
             else:
                 self._alias_overrides = {}
         except Exception as e:
             logger.error(f"Error loading alias overrides: {e}")
             self._alias_overrides = {}
+            self._alias_overrides_meta = {}
 
     def _expand_alias_tokens(self, text: str, sport: str) -> Set[str]:
         tokens: Set[str] = set()

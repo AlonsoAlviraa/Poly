@@ -212,6 +212,10 @@ class SportsMarketMatcher:
         """
         ENTITY GUARDRAIL: Validates that a match shares actual entities.
         """
+        def _split_vs(text: str) -> List[str]:
+            parts = re.split(r' vs\.? | v\.? | @ | - ', text.lower())
+            return [p.strip() for p in parts if p.strip()]
+
         # 1. Resolve entities from both sides (Canonical Check - "The Gold Standard")
         poly_entities = self._extract_entities(poly_question)
         bf_entities = self._extract_entities(bf_event_name)
@@ -224,6 +228,19 @@ class SportsMarketMatcher:
         poly_tokens = self._get_clean_tokens(poly_question)
         bf_tokens = self._get_clean_tokens(bf_event_name)
         shared_tokens = poly_tokens & bf_tokens
+
+        # 2.1 Double-side validation for "A vs B" formats
+        poly_sides = _split_vs(poly_question)
+        bf_sides = _split_vs(bf_event_name)
+        if len(poly_sides) >= 2 and len(bf_sides) >= 2:
+            poly_side_tokens = [self._get_clean_tokens(side) for side in poly_sides]
+            bf_side_tokens = [self._get_clean_tokens(side) for side in bf_sides]
+            matches = []
+            for p_tokens in poly_side_tokens:
+                side_match = any(p_tokens & b_tokens for b_tokens in bf_side_tokens)
+                matches.append(side_match)
+            if not all(matches):
+                return (False, set(), f"No double-side match. PolySides={poly_sides}, BFSides={bf_sides}")
         
         # PASS if: at least 1 strong shared token
         if len(shared_tokens) >= 1:
@@ -266,10 +283,11 @@ class SportsMarketMatcher:
             bf_name = bf.get('name', '')
             
             # Method 1: Fuzzy matching (primary for match bets)
-            fuzzy_score, _ = self._fuzzy_match(poly_question, bf_name)
+            overlap, common = self._keyword_overlap(poly_question, bf_name)
+            low_conf_queue = overlap < self.min_overlap and not common
+            fuzzy_score, _ = self._fuzzy_match(poly_question, bf_name) if low_conf_queue else (0, 'skipped')
             
             # Method 2: Keyword/entity overlap (secondary)
-            overlap, common = self._keyword_overlap(poly_question, bf_name)
             
             # Combine scores (fuzzy is primary)
             combined_score = fuzzy_score / 100.0  # Normalize to 0-1
