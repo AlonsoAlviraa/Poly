@@ -37,12 +37,30 @@ class AuditLogger:
     def __init__(self, session_id: Optional[str] = None):
         self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         self.events: Dict[str, TraceableEvent] = {}
+        self.stats = {
+            "total_scanned": 0,
+            "arbs_found": [],
+            "sports_count": {} # sport -> count
+        }
         self.start_time = datetime.now()
 
-    def get_event(self, poly_id: str, poly_name: str) -> TraceableEvent:
+    def get_event(self, poly_id: str, poly_name: str, sport: str = "unknown") -> TraceableEvent:
         if poly_id not in self.events:
-            self.events[poly_id] = TraceableEvent(poly_id=poly_id, poly_name=poly_name)
+            self.events[poly_id] = TraceableEvent(poly_id=poly_id, poly_name=poly_name, category=sport)
+            self.stats["total_scanned"] += 1
+            # Update sport stats
+            s = sport.lower()
+            self.stats["sports_count"][s] = self.stats["sports_count"].get(s, 0) + 1
+            
         return self.events[poly_id]
+
+    def log_arb_found(self, poly_name: str, roi: float, sport: str):
+        self.stats["arbs_found"].append({
+            "name": poly_name,
+            "roi": roi,
+            "sport": sport,
+            "time": datetime.now().strftime("%H:%M:%S")
+        })
 
     def generate_html_report(self, output_dir: str = "debug_reports"):
         if not os.path.exists(output_dir):
@@ -88,6 +106,11 @@ class AuditLogger:
             </tr>
             """
             
+        # Build Stats Summary
+        sports_html = "".join([f"<li><b>{s.upper()}:</b> {c} matches</li>" for s, c in self.stats["sports_count"].items()])
+        arbs_html = "".join([f"<li><span class='status-pass'>[{a['time']}]</span> <b>{a['name']}</b> ({a['sport']}) - ROI: {a['roi']:.2f}%</li>" for a in self.stats["arbs_found"]])
+        if not arbs_html: arbs_html = "<li>No opportunities found yet.</li>"
+
         return f"""
         <!DOCTYPE html>
         <html>
@@ -96,6 +119,8 @@ class AuditLogger:
             <style>
                 body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: #e0e0e0; margin: 20px; }}
                 h1 {{ color: #00ff88; }}
+                .dashboard {{ display: flex; gap: 20px; margin-bottom: 20px; }}
+                .card {{ background: #2d2d2d; padding: 15px; border-radius: 8px; flex: 1; border-left: 4px solid #00ff88; }}
                 table {{ width: 100%; border-collapse: collapse; background: #2d2d2d; border-radius: 8px; overflow: hidden; }}
                 th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #444; }}
                 th {{ background: #3d3d3d; color: #00ff88; }}
@@ -111,7 +136,23 @@ class AuditLogger:
         </head>
         <body>
             <h1>🛠️ APU Mega Debugger: Pipeline Trace</h1>
-            <p>Session: {self.session_id} | Scanned Markets: {len(self.events)}</p>
+            
+            <div class="dashboard">
+                <div class="card">
+                    <h3>📊 Resumen por Deporte</h3>
+                    <ul>{sports_count_html if 'sports_count_html' in locals() else sports_html}</ul>
+                </div>
+                <div class="card">
+                    <h3>💰 Arbitrajes Encontrados ({len(self.stats['arbs_found'])})</h3>
+                    <ul>{arbs_html}</ul>
+                </div>
+                <div class="card">
+                    <h3>📈 Eficiencia</h3>
+                    <p>Total Scanned: {self.stats['total_scanned']}</p>
+                    <p>Session ID: {self.session_id}</p>
+                </div>
+            </div>
+
             <table>
                 <thead>
                     <tr>

@@ -1,0 +1,105 @@
+INFO:src.data.gamma_client:[Polymarket] \U0001f30a OPENING THE TAP - Broad Ingestion Pattern (Parallel)...
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10341 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10672 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10342 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10340 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=100008 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10344 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10346 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=100032 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10339 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10343 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10271 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10345 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=100028 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=100639 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=100128 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=100650 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=100127 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10349 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=100109 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=0&order=volume&ascending=false&closed=false&tag_id=10452 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=100&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=100&order=volume&ascending=false&closed=false&tag_id=100639 "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=200&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=300&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=400&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=500&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=600&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=700&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=800&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=900&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1000&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1100&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1200&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1300&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1400&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1500&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1600&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1700&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1800&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://gamma-api.polymarket.com/markets?limit=100&offset=1900&order=volume&ascending=false&closed=false "HTTP/2 200 OK"
+INFO:src.data.gamma_client:[Polymarket] \u2705 INGESTION COMPLETE: 379 valid entries.
+INFO:src.data.sx_bet_client:[SX Bet] Fetched 50 markets (category: None)
+>> FETCHING DATA FOR DIAGNOSIS...
+   Fetching Polymarket...
+   Fetched 379 Polymarket questions.
+   Fetching SX Bet...
+   [RAW DEBUG] Fetched 50 raw markets.
+   [RAW DEBUG] Sample Market 0 Keys: dict_keys(['status', 'marketHash', 'outcomeOneName', 'outcomeTwoName', 'outcomeVoidName', 'teamOneName', 'teamTwoName', 'participantOneId', 'participantTwoId', 'type', 'gameTime', 'sportXeventId', 'liveEnabled', '__type', 'sportLabel', 'sportId', 'leagueId', 'leagueLabel', 'chainVersion', 'group1'])
+   [RAW DEBUG] Sample Market 0 gameTime: 1771365600
+   [RAW DEBUG] Sample Market 0 item: {
+  "status": "ACTIVE",
+  "marketHash": "0xbc4058a20a28061077de648d3d6aadcc89c75e31bc7ba6c1d70735ff465e7e03",
+  "outcomeOneName": "Huachipato",
+  "outcomeTwoName": "Not Huachipato",
+  "outcomeVoidName": "NO_CONTEST",
+  "teamOneName": "Carabobo FC",
+  "teamTwoName": "Huachipato",
+  "participantOneId": 153952,
+  "participantTwoId": 130887,
+  "type": 1,
+  "gameTime": 1771365600,
+  "sportXeventId": "L17534538",
+  "liveEnabled": true,
+  "__type": "Market",
+  "sportLabel": "Soccer",
+  "sportId": 5,
+  
+   Fetched 50 parsed SX Bet markets.
+
+   [DEBUG] SX Date Parsing Sample (Parsed Objects):
+     Label: Carabobo FC vs Huachipato | GameTime: None | Status: ACTIVE
+     Label: Carabobo FC vs Huachipato | GameTime: None | Status: ACTIVE
+     Label: Carabobo FC vs Huachipato | GameTime: None | Status: ACTIVE
+     Label: Carabobo FC vs Huachipato | GameTime: None | Status: ACTIVE
+     Label: Carabobo FC vs Huachipato | GameTime: None | Status: ACTIVE
+
+>> RUNNING STRING WAR (Top Matches > 50)...
+------------------------------------------------------------------------------------------------------------------------
+SCORE | POLYMARKET QUESTION                                | SX BET LABEL                             | MATCH TYPE
+------------------------------------------------------------------------------------------------------------------------
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+62.06896551724138 | Sunderland AFC vs. Liverpool FC: O/U 2.5           | Liverpool Montevideo vs Independiente Me | Matches: 'Liverpool Montevideo'
+------------------------------------------------------------------------------------------------------------------------
+Total potential matches checked. Found 21 pairs > 60 score.

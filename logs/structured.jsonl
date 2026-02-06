@@ -1,0 +1,16 @@
+{"timestamp": "2026-02-03T11:44:34.123647Z", "level": "INFO", "event_type": "json_test", "data": {"trace_id": "t1"}}
+{"timestamp": "2026-02-03T11:44:34.132678Z", "level": "INFO", "event_type": "ingest", "data": {"trace_id": "trace-123"}}
+{"timestamp": "2026-02-03T11:44:34.133891Z", "level": "INFO", "event_type": "decision", "data": {"trace_id": "trace-123"}}
+{"timestamp": "2026-02-03T11:44:34.134459Z", "level": "INFO", "event_type": "execution", "data": {"trace_id": "trace-123"}}
+{"timestamp": "2026-02-03T11:44:34.135007Z", "level": "INFO", "event_type": "result", "data": {"trace_id": "trace-123"}}
+{"timestamp": "2026-02-03T11:44:34.163883Z", "level": "INFO", "event_type": "ingest", "data": {"trace_id": "trace-999"}}
+{"timestamp": "2026-02-03T11:44:34.165548Z", "level": "INFO", "event_type": "decision", "data": {"trace_id": "trace-999"}}
+{"timestamp": "2026-02-03T11:44:34.167679Z", "level": "INFO", "event_type": "execution", "data": {"trace_id": "trace-999"}}
+{"timestamp": "2026-02-03T11:44:34.168849Z", "level": "INFO", "event_type": "result", "data": {"trace_id": "trace-999"}}
+{"timestamp": "2026-02-03T11:44:36.503420Z", "level": "INFO", "event_type": "safe_log", "data": {"trace_id": "t1", "private_key": "***"}}
+{"timestamp": "2026-02-04T18:40:54.089008Z", "level": "INFO", "event_type": "Using MOCK Executor", "data": {}}
+{"timestamp": "2026-02-04T18:40:54.112046Z", "level": "INFO", "event_type": "ENGINE_STARTUP", "data": {"dry_run": true, "status": "INITIALIZED", "rpcs": 2, "min_profit": 0.15, "real_exec": false}}
+{"timestamp": "2026-02-04T18:40:54.130744Z", "level": "INFO", "event_type": "LOOP_START", "data": {"port": 8000}}
+{"timestamp": "2026-02-04T18:40:54.141449Z", "level": "INFO", "event_type": "ARBITRAGE_DETECTED", "data": {"prices": [0.4, 0.4], "real_data": true}}
+{"timestamp": "2026-02-04T18:41:12.644976Z", "level": "INFO", "event_type": "EV_NEGATIVE_GAS", "data": {"ev": -0.05, "size": 0.0, "msg": "Skipping Leg: Gas eats Edge"}}
+{"timestamp": "2026-02-04T18:41:12.660454Z", "level": "INFO", "event_type": "EV_NEGATIVE_GAS", "data": {"ev": -0.05, "size": 0.0, "msg": "Skipping Leg: Gas eats Edge"}}

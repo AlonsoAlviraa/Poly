@@ -1,0 +1,4 @@
+# file: C:\Users\alons\Desktop\FUTURO\APU\src\arbitrage\combinatorial_scanner.py
+# hypothesis_version: 6.151.4
+
+[0.0, 0.1, 0.3, 0.4, 0.5, 0.6, 0.8, 0.9, 0.95, 1.0, 2.0, 15.0, 25.0, 50.0, 100, 137, 200, '0x', '1', '=', 'API_LLM', 'BUY', 'OPENROUTER_API_KEY', 'Unknown', 'Unknown Event', '\\{[^}]+\\}', '__main__', '```', 'asks', 'buy', 'closed', 'confidence', 'content', 'dependent', 'false', 'groupItemTitle', 'id', 'json', 'limit', 'markets', 'mid', 'negrisk', 'no', 'offset', 'outcome', 'price', 'related', 'role', 'sell', 'side', 'size', 'sum_to_one', 'sum_to_one_buy', 'sum_to_one_sell', 'system', 'title', 'token_id', 'tokens', 'true', 'unknown', 'user', 'xiaomi/mimo-v2-flash', 'yes']

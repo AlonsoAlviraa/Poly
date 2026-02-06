@@ -36,7 +36,7 @@ class BetfairEndpoint(Enum):
     ITALY = "https://api.betfair.it"
     
     IDENTITY_GLOBAL = "https://identitysso-cert.betfair.com/api/certlogin"
-    IDENTITY_SPAIN = "https://identitysso.betfair.es/api/certlogin"
+    IDENTITY_SPAIN = "https://identitysso-cert.betfair.es/api/certlogin" # Added -cert
     IDENTITY_SPAIN_INTERACTIVE = "https://identitysso.betfair.es/api/login"
     
     # API Operations
@@ -180,6 +180,11 @@ class BetfairClient:
         return self.endpoint.value
     
     @property
+    def session_token(self) -> Optional[str]:
+        """Get current session token."""
+        return self._session.ssoid if self._session else None
+
+    @property
     def is_authenticated(self) -> bool:
         """Check if we have a valid session."""
         if not self._session:
@@ -228,7 +233,7 @@ class BetfairClient:
             'X-Application': self.app_key,
             'Content-Type': 'application/x-www-form-urlencoded',
             'Accept': 'application/json',
-            'User-Agent': 'QuantArbBot/2.0'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
         data = {
@@ -246,6 +251,13 @@ class BetfairClient:
             
             # Interactive Login Fallback (No Certs)
             if (response.status_code == 403 or (response.status_code == 200 and response.json().get('loginStatus') != 'SUCCESS')) and interactive_url:
+                 # DIAGNOSTIC: Print exact error (Truncated)
+                 print(f"\n[DIAGNOSTIC] Cert Login Failed. Status: {response.status_code}")
+                 print(f"[DIAGNOSTIC] Body: {response.text[:200]}...")
+                 
+                 if response.status_code == 403:
+                     logger.error("[Betfair] 403 Forbidden - Likely Invalid Certificate. Check if .crt matches .key or if uploaded to Betfair.")
+                 
                  logger.warning("[Betfair] Cert login failed. Trying Interactive Login (No Certs)...")
                  # New clean client for interactive (no certs attached)
                  async with httpx.AsyncClient() as interactive_client:
@@ -371,24 +383,34 @@ class BetfairClient:
             'Content-Type': 'application/json'
         }
         
-        try:
-            response = await self._client.post(
-                url,
-                headers=headers,
-                json=params or {}
-            )
-            
-            self.stats['api_calls'] += 1
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"[Betfair] API error {method}: {response.status_code}")
-                return None
+        for attempt in range(3):
+            try:
+                response = await self._client.post(
+                    url,
+                    headers=headers,
+                    json=params or {}
+                )
                 
-        except Exception as e:
-            logger.error(f"[Betfair] API exception {method}: {e}")
-            return None
+                self.stats['api_calls'] += 1
+                
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code in [500, 502, 503, 504]:
+                    logger.warning(f"[Betfair] Transient error {response.status_code} on attempt {attempt+1}. Retrying...")
+                    await asyncio.sleep(1 * (attempt + 1))
+                    continue
+                else:
+                    logger.error(f"[Betfair] API error {method}: {response.status_code}")
+                    logger.error(f"[Betfair] Payload: {json.dumps(params)}")
+                    return None
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.NetworkError) as e:
+                logger.warning(f"[Betfair] Connection error {type(e).__name__} on attempt {attempt+1}. Retrying...")
+                await asyncio.sleep(1 * (attempt + 1))
+                continue
+            except Exception as e:
+                logger.error(f"[Betfair] API exception {method} ({type(e).__name__}): {e}")
+                return None
+        return None
     
     async def list_event_types(self) -> List[Dict]:
         """
@@ -526,38 +548,46 @@ class BetfairClient:
             market_ids: List of market IDs
             price_projection: 'BEST' for best available, 'ALL' for full ladder
         """
-        result = await self._api_request('listMarketBook', {
+        # SIMPLIFIED PAYLOAD for maximum compatibility (especially Spain certs)
+        payload = {
             'marketIds': market_ids,
             'priceProjection': {
                 'priceData': ['EX_BEST_OFFERS'],
-                'exBestOffersOverrides': {
-                    'bestPricesDepth': 3,
-                    'rollupLimit': 3
-                },
                 'virtualise': True
             }
-        })
+        }
+        
+        result = await self._api_request('listMarketBook', payload)
         
         prices = []
         timestamp = datetime.now()
         
-        # Apply 15-minute delay notice for free tier
         if self.use_delay:
             timestamp -= timedelta(minutes=15)
         
         if result:
+            # Check if result is a list or an error dict
+            if not isinstance(result, list):
+                logger.error(f"[Betfair] listMarketBook expected list, got: {type(result).__name__}")
+                if isinstance(result, dict) and ('error' in str(result).lower() or 'fault' in str(result).lower()):
+                    logger.error(f"[Betfair] API Error Body: {json.dumps(result)}")
+                return []
+                
             for market in result:
-                market_id = market['marketId']
+                market_id = market.get('marketId')
+                if not market_id: continue
                 
                 for runner in market.get('runners', []):
-                    selection_id = runner['selectionId']
+                    selection_id = runner.get('selectionId')
+                    if not selection_id: continue
                     
                     # Get best back (buy) price
-                    back_prices = runner.get('ex', {}).get('availableToBack', [])
+                    ex = runner.get('ex', {})
+                    back_prices = ex.get('availableToBack', [])
                     best_back = back_prices[0] if back_prices else {'price': 0, 'size': 0}
                     
                     # Get best lay (sell) price  
-                    lay_prices = runner.get('ex', {}).get('availableToLay', [])
+                    lay_prices = ex.get('availableToLay', [])
                     best_lay = lay_prices[0] if lay_prices else {'price': 0, 'size': 0}
                     
                     # Calculate top 3 liquidity
@@ -567,14 +597,14 @@ class BetfairClient:
                     price = BetfairPrice(
                         market_id=market_id,
                         selection_id=selection_id,
-                        runner_name=runner.get('lastPriceTraded', 0),
+                        runner_name=str(runner.get('lastPriceTraded', 'Unknown')),
                         back_price=best_back.get('price', 0),
                         lay_price=best_lay.get('price', 0),
                         back_size=best_back.get('size', 0),
                         lay_size=best_lay.get('size', 0),
                         back_liquidity_top3=back_liq_top3,
                         lay_liquidity_top3=lay_liq_top3,
-                        last_traded=runner.get('lastPriceTraded', 0),
+                        last_traded=float(runner.get('lastPriceTraded', 0) or 0),
                         timestamp=timestamp
                     )
                     prices.append(price)

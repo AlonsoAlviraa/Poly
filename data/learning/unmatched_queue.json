@@ -1,0 +1,18 @@
+[
+  {
+    "poly_name": "Test Team X",
+    "bf_candidate": "Team X City",
+    "bf_market_id": "1.98765432",
+    "score": 0.65,
+    "sport": "basketball",
+    "date": "2026-02-06T20:00:00"
+  },
+  {
+    "poly_name": "Girona FC vs. FC Barcelona: O/U 3.5",
+    "bf_candidate": "Baskonia Vitoria-Gasteiz v FC Barcelona",
+    "bf_market_id": "35221972",
+    "score": 0.6490667462348938,
+    "sport": "soccer",
+    "date": "2026-02-06T19:52:31.945255"
+  }
+]

@@ -1,0 +1,4 @@
+# file: C:\Users\alons\AppData\Roaming\Python\Python314\site-packages\rapidfuzz\distance\__init__.py
+# hypothesis_version: 6.151.4
+
+['DamerauLevenshtein', 'Editop', 'Editops', 'Hamming', 'Indel', 'Jaro', 'JaroWinkler', 'LCSseq', 'Levenshtein', 'MatchingBlock', 'OSA', 'Opcode', 'Opcodes', 'Postfix', 'Prefix', 'ScoreAlignment']

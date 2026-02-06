@@ -1,0 +1,4 @@
+# file: C:\Users\alons\Desktop\FUTURO\APU\src\arbitrage\entity_resolver_logic.py
+# hypothesis_version: 6.151.4
+
+['MATCH', 'Mn', 'NFD', '[^a-z0-9]', 'atletico', 'barca', 'barcelona', 'city', 'club', 'data', 'fc', 'g2', 'g2 esports', 'germain', 'man city', 'man utd', 'manchester city', 'manchester united', 'mappings.json', 'paris', 'paris saint germain', 'psg', 'r', 'real', 'saint', 'saint germain', 'st germain', 'team', 'united', 'utf-8', 'w']

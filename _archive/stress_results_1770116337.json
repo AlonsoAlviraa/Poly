@@ -1,0 +1,30 @@
+{
+    "network": {
+        "ip": "178.60.108.161",
+        "ja3": "705674b3421740ae7c1fa65472b71686",
+        "h2_active": false,
+        "success": false
+    },
+    "websockets": {
+        "poly_connected": false,
+        "success": false
+    },
+    "parsing": {
+        "iterations": 500000,
+        "avg_time_us": 13.666818599998805,
+        "success": true
+    },
+    "db_latency": {
+        "points": 5000000,
+        "avg_ms": 0.000972405499999877,
+        "success": true
+    },
+    "ai_diagnostics": {
+        "cache_avg_ms": 0.015352196000021651,
+        "logic_gating_ok": true,
+        "success": true
+    },
+    "filters": {
+        "success": true
+    }
+}

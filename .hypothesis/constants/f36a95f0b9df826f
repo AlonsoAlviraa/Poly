@@ -1,0 +1,4 @@
+# file: C:\Users\alons\Desktop\FUTURO\APU\src\arbitrage\models.py
+# hypothesis_version: 6.151.4
+
+['betfair_event_id', 'betfair_event_name', 'betfair_market_id', 'bf', 'bf_runner_name', 'bf_selection_id', 'confidence', 'exchange', 'mapped_at', 'polymarket_id', 'polymarket_question', 'polymarket_slug', 'source']

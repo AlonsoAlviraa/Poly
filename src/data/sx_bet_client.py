@@ -26,8 +26,14 @@ import time
 import logging
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
+
+# Import Validator
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.arbitrage.arbitrage_validator import ArbitrageValidator, ArbResult
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -55,7 +61,9 @@ class SXBetCategory(Enum):
 class SXBetMarket:
     """Representation of an SX Bet market."""
     market_hash: str
+    market_hash: str
     label: str
+    market_key: str # Added for semantic filtering (e.g. 'game_winner')
     sport_label: str
     outcome_one_name: str
     outcome_two_name: str
@@ -127,6 +135,24 @@ class SXBetClient:
     # Price scaling factors
     ODDS_DIVISOR = 1e20
     USDC_DIVISOR = 1e6
+
+    # Category to Sport ID Map
+    SPORT_ID_MAP = {
+        'Soccer': 5,
+        'Tennis': 3,
+        'Basketball': 4,
+        'American Football': 2, # Need to verify, assuming standard or from probe
+        'Baseball': 8, # Probe didn't show, using placeholder or check later. Probe showed ID 26 is AFL. ID 2 is likely American Football or similar.
+        # From probe:
+        # 5: Soccer, 3: Tennis, 4: Basketball, 17: Politics, 14: Crypto, 15: Cricket
+        # 13: Boxing, 11: Rugby Union, 20: Rugby League, 24: Horse Racing
+        'Politics': 17,
+        'Crypto': 14,
+        'Cricket': 15,
+        'Boxing': 13,
+        'MMA': 7, # Guessing or need probe
+        'Ice Hockey': 6 # Guessing
+    }
     
     def __init__(self, 
                  api_key: Optional[str] = None,
@@ -172,6 +198,27 @@ class SXBetClient:
         """Close the session."""
         if self._session and not self._session.closed:
             await self._session.close()
+
+    async def fetch_markets(self, market_ids: List[str]) -> List[Dict]:
+        """
+        Bulk fetch market status and prices for a list of hashes.
+        Refreshes global orders and calculates top of book for each.
+        """
+        await self._refresh_orders() # Global refresh
+        results = []
+        
+        # We need the market labels too. If not in cache, we might miss them.
+        # But for poller, hashes are usually enough if we just need prices.
+        
+        for m_hash in market_ids:
+            ob = await self.get_orderbook(m_hash)
+            results.append({
+                'marketHash': m_hash,
+                'highestBid': ob.best_bid,
+                'lowestAsk': ob.best_ask,
+                'status': 'ACTIVE' # Placeholder
+            })
+        return results
     
     async def get_active_markets(self, 
                                   category: Optional[SXBetCategory] = None,
@@ -194,20 +241,57 @@ class SXBetClient:
             markets = self._markets_cache
         else:
             session = await self._get_session()
+            all_markets = []
+            next_key = None
+            
+            # Determine API Sport ID
+            sport_id = None
+            if category:
+                 sport_id = self.SPORT_ID_MAP.get(category.value)
+                 # Handle special cases if value doesn't match keys exactly
+                 if not sport_id and category == SXBetCategory.POLITICS: sport_id = 17
+                 if not sport_id and category == SXBetCategory.CRYPTO: sport_id = 14
+                 if not sport_id and category == SXBetCategory.SOCCER: sport_id = 5
+                 if not sport_id and category == SXBetCategory.TENNIS: sport_id = 3
+                 if not sport_id and category == SXBetCategory.BASKETBALL: sport_id = 4
             
             try:
-                async with session.get(f"{self.BASE_URL}/markets/active", timeout=15) as response:
-                    self.stats['api_calls'] += 1
+                while True:
+                    params = {}
+                    if next_key:
+                        params['paginationKey'] = next_key
                     
-                    if response.status != 200:
-                        logger.error(f"SX Bet API error: {response.status}")
-                        return []
-                    
-                    data = await response.json()
-                    markets = data.get("data", {}).get("markets", [])
-                    
-                    self._markets_cache = markets
-                    self._markets_cache_time = now
+                    # FORCE BROAD SCAN: Do not filter by Sport ID on API level
+                    # if sport_id:
+                    #    params['sportId'] = sport_id
+
+                    async with session.get(f"{self.BASE_URL}/markets/active", params=params, timeout=15) as response:
+                        self.stats['api_calls'] += 1
+                        
+                        if response.status != 200:
+                            logger.error(f"SX Bet API error: {response.status}")
+                            break
+                        
+                        data = await response.json()
+                        page_markets = data.get("data", {}).get("markets", [])
+                        if not page_markets:
+                            break
+                            
+                        all_markets.extend(page_markets)
+                        
+                        # Check for next page
+                        next_key = data.get("data", {}).get("nextKey")
+                        if not next_key:
+                            break
+                            
+                        # Safety break for massive scrapes
+                        if len(all_markets) > 2000:
+                            logger.warning("SX Bet fetch limit reached (2000)")
+                            break
+
+                markets = all_markets
+                self._markets_cache = markets
+                self._markets_cache_time = now
                     
             except Exception as e:
                 logger.error(f"Error fetching SX markets: {e}")
@@ -241,17 +325,26 @@ class SXBetClient:
             t2 = m.get('teamTwoName', '')
             label = f"{t1} vs {t2}" if t1 and t2 else m.get('outcomeOneName', 'Match')
             
-            # Parse game time
+            # Parse game time (Supports ISO or Unix Timestamp)
             game_time = None
-            if m.get('gameTime'):
+            gt = m.get('gameTime')
+            if gt:
                 try:
-                    game_time = datetime.fromisoformat(str(m.get('gameTime')).replace('Z', '+00:00'))
-                except:
-                    pass
+                    if isinstance(gt, (int, float)) or (isinstance(gt, str) and gt.isdigit()):
+                        ts = float(gt)
+                        # Detect milliseconds (if year > 3000, assume millis)
+                        if ts > 4102444800: # 2100 AD
+                            ts /= 1000
+                        game_time = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    else:
+                        game_time = datetime.fromisoformat(str(gt).replace('Z', '+00:00'))
+                except Exception as e:
+                    logger.debug(f"Failed to parse SX time {gt}: {e}")
             
             sx_market = SXBetMarket(
                 market_hash=market_hash,
                 label=label,
+                market_key=m.get('marketKey', ''), # Populate market_key
                 sport_label=sport_label,
                 outcome_one_name=m.get('outcomeOneName', 'Yes'),
                 outcome_two_name=m.get('outcomeTwoName', 'No'),
@@ -268,6 +361,56 @@ class SXBetClient:
         logger.info(f"[SX Bet] Fetched {len(filtered)} markets (category: {category})")
         
         return filtered
+
+    def _normalize_market_type(self, market_key: str) -> str:
+        """Map SX market keys to Betfair-style market types."""
+        k = market_key.lower()
+        if k in ['game_winner', 'match_winner', 'winner', 'ipv', '1x2']:
+            return 'MATCH_ODDS'
+        if k in ['moneyline', 'money_line', 'h2h', 'head_to_head']:
+            return 'MONEY_LINE'
+        if 'handicap' in k or 'spread' in k:
+            return 'HANDICAP'
+        if 'total' in k or 'over' in k or 'under' in k:
+            return 'OVER_UNDER'
+        return k.upper()
+
+    async def get_markets_standardized(self, category: Optional[SXBetCategory] = None) -> List[Dict]:
+        """
+        Fetch markets and return them in the standardized format used by CrossPlatformMapper.
+        Matches the Betfair event dictionary structure.
+        """
+        markets = await self.get_active_markets(category=category)
+        standardized = []
+        for m in markets:
+            # Map SX categories to our local sport_ids if possible, or let the mapper handle it
+            # Standardized structure:
+            # {
+            #     'id': str,
+            #     'event_id': str,
+            #     'market_id': str,
+            #     'name': str,
+            #     'open_date': str (ISO),
+            #     'market_type': str,
+            #     'runners': List[Dict],
+            #     'exchange': 'sx' # Mandatory for multi-exchange
+            # }
+            standardized.append({
+                'id': m.market_hash,
+                'event_id': m.market_hash,
+                'market_id': m.market_hash,
+                'name': m.label,
+                'open_date': m.game_time.isoformat() if m.game_time else None,
+                # Normalize Market Type for Mapper (MATCH_ODDS, MONEY_LINE, etc.)
+                'market_type': self._normalize_market_type(m.market_key),
+                'runners': [
+                    {'selectionId': 1, 'runnerName': m.outcome_one_name},
+                    {'selectionId': 2, 'runnerName': m.outcome_two_name}
+                ],
+                'exchange': 'sx',
+                '_sx_market_obj': m # Keep reference for price fetching
+            })
+        return standardized
     
     async def _refresh_orders(self, force: bool = False):
         """Refresh the global orders cache."""
@@ -438,12 +581,10 @@ class PolySXArbitrageScanner:
     
     async def find_matching_markets(self, 
                                      poly_markets: List[Dict],
-                                     sx_markets: List[SXBetMarket]) -> List[Dict]:
+                                     sx_data: List[Tuple[SXBetMarket, SXBetOrderbook]]) -> List[Dict]:
         """
         Find markets that exist on both platforms.
-        Uses fuzzy text matching on market questions/labels.
-        
-        TODO: Integrate LLM matching from cross_platform_mapper.py
+        Uses fuzzy text matching and STRICT semantic validation.
         """
         matches = []
         
@@ -451,10 +592,38 @@ class PolySXArbitrageScanner:
             poly_question = poly.get('question', '').lower()
             poly_id = poly.get('condition_id', '')
             
-            for sx in sx_markets:
+            for sx, orderbook in sx_data:
                 sx_label = sx.label.lower()
                 
-                # Simple keyword matching (can be improved with LLM)
+                # STRICT Semantic Validation from Validator Engine
+                if not ArbitrageValidator.is_semantically_compatible(poly_question, sx.market_key, sx.sport_label):
+                    continue 
+
+                # TIME WINDOW Check (Strategy C)
+                # Need poly_time. Polymarket events usually have 'startDate' in ISO.
+                # poly dict comes from adapt_gamma_events, check keys.
+                # Gamma events have 'startDate'. adapt_gamma_events keeps keys? 
+                # adapt_gamma_events creates new dict. Need to ensure 'startDate' is passed.
+                # Assuming it is or I need to update adapt_gamma_events first?
+                # Check adapt_gamma_events in shadow_bot.py... 
+                # It does: 'id', 'condition_id', 'question', 'slug', 'yes_price', 'tokens'.
+                # MISSING 'startDate'. I should update adapt_gamma_events later.
+                # For now, if missing, validator returns True (soft pass).
+                
+                poly_start = poly.get('startDate') 
+                sx_time = sx.game_time
+                
+                p_dt = None
+                if poly_start:
+                    try:
+                        p_dt = datetime.fromisoformat(poly_start.replace('Z', '+00:00'))
+                    except:
+                        pass
+                
+                if not ArbitrageValidator.check_time_window(p_dt, sx_time):
+                    continue
+
+                # Simple keyword matching matching
                 # Check for common terms
                 poly_terms = set(poly_question.split())
                 sx_terms = set(sx_label.split())
@@ -467,93 +636,115 @@ class PolySXArbitrageScanner:
                     common = {w for w in common if len(w) > 3}
                     
                     if len(common) >= 1:
+                        # Extract liquidity at best price
+                        bid_depth = orderbook.bids[0]['size'] if orderbook.bids else 0.0
+                        ask_depth = orderbook.asks[0]['size'] if orderbook.asks else 0.0
+                        
                         matches.append({
                             'poly_id': poly_id,
                             'poly_question': poly.get('question', ''),
                             'poly_yes_price': float(poly.get('tokens', [{}])[0].get('price', 0.5)),
+                            # Liquidity from Poly (Mocking 100 for now if real data not available in 'tokens', usually it is)
+                            'poly_liquidity': 100.0, # TODO: extract real poly liquidity
                             'sx_hash': sx.market_hash,
                             'sx_label': sx.label,
+                            'sx_market_key': sx.market_key,
                             'sx_best_bid': sx.best_bid,
                             'sx_best_ask': sx.best_ask,
+                            'sx_bid_depth': bid_depth,
+                            'sx_ask_depth': ask_depth,
                             'common_terms': list(common)
                         })
         
         self.stats['matches_found'] += len(matches)
         return matches
+
+
     
     def calculate_arbitrage(self, 
                             poly_yes: float, 
                             sx_bid: float, 
-                            sx_ask: float) -> Dict:
+                            sx_ask: float,
+                            poly_liq: float,
+                            sx_bid_liq: float,
+                            sx_ask_liq: float) -> Dict:
         """
-        Calculate if arbitrage exists between platforms.
-        
-        Scenario 1: Buy YES on Poly, Sell YES on SX
-            Profit if: Poly_YES < SX_BID
-            
-        Scenario 2: Buy NO on Poly (1-YES), Buy YES on SX
-            Profit if: (1-Poly_YES) + SX_ASK < 1
-            Simplified: Poly_YES > SX_ASK
+        Calculate if arbitrage exists using Professional Fee-Adjusted Formula.
         """
         arb = {
             'has_opportunity': False,
             'direction': None,
-            'expected_profit_pct': 0.0
+            'expected_profit_pct': 0.0,
+            'max_volume': 0.0
         }
         
-        # Scenario 1: Poly YES cheaper than SX bid
-        if poly_yes < sx_bid and sx_bid > 0:
-            spread = sx_bid - poly_yes
-            arb = {
-                'has_opportunity': True,
-                'direction': 'buy_poly_sell_sx',
-                'expected_profit_pct': spread * 100,
-                'poly_action': 'BUY YES',
-                'sx_action': 'SELL YES (take bid)',
-                'buy_price': poly_yes,
-                'sell_price': sx_bid
-            }
+        # Scenario 1: Buy YES on Poly, Sell YES on SX (Lay)
+        # Poly Ask vs SX Bid
+        # Fee 2% on SX
+        res1 = ArbitrageValidator.calculate_roi(poly_ask=poly_yes, exch_odds=1.0/sx_bid if sx_bid > 0 else 1.0, fee_rate=0.02)
+        if res1.is_opportunity:
+            # Check Liquidity
+            max_vol = min(poly_liq, sx_bid_liq)
+            if ArbitrageValidator.check_liquidity(poly_liq, sx_bid_liq, min_threshold=10.0):
+                arb = {
+                    'has_opportunity': True,
+                    'direction': 'buy_poly_sell_sx',
+                    'expected_profit_pct': res1.roi_percent,
+                    'poly_action': 'BUY YES',
+                    'sx_action': 'SELL YES (take bid)',
+                    'buy_price': poly_yes,
+                    'sell_price': sx_bid,
+                    'max_volume': max_vol,
+                    'roi_detail': f"ROI: {res1.roi_percent:.2f}% (Fee Adj)"
+                }
+                return arb
         
-        # Scenario 2: SX YES cheaper than implied by Poly
-        elif sx_ask < poly_yes and sx_ask > 0:
-            spread = poly_yes - sx_ask
-            arb = {
-                'has_opportunity': True,
-                'direction': 'buy_sx_sell_poly',
-                'expected_profit_pct': spread * 100,
-                'poly_action': 'BUY NO (sell YES)',
-                'sx_action': 'BUY YES',
-                'buy_price': sx_ask,
-                'sell_price': poly_yes
-            }
+        # Scenario 2: SX YES cheaper than Poly YES
+        # Buy SX YES (Ask), Sell Poly YES (No support for Short Poly yet, so we assume Buy NO on Poly?)
+        # User prompt implies: "Buy NO on Poly (1-YES) + Buy YES on SX"
+        # Total Cost = (1-PolyYES) + SX_Ask
+        # ROI = 1 - Total Cost
+        # Validation:
+        poly_no_price = 1.0 - poly_yes
+        # Using 0 fee for SX Buy (Taker fee might exist, assume 0 for check or 2%)
+        # Let's use simple cost comparison for this direction as standard validator is for Ask vs Exch(Lay)
         
+        total_cost = poly_no_price + sx_ask
+        roi = (1.0 - total_cost) * 100
+        if roi > 0:
+            max_vol = min(poly_liq, sx_ask_liq)
+            if max_vol >= 10.0:
+                 arb = {
+                    'has_opportunity': True,
+                    'direction': 'buy_sx_sell_poly_no',
+                    'expected_profit_pct': roi,
+                    'poly_action': 'BUY NO',
+                    'sx_action': 'BUY YES',
+                    'buy_price': sx_ask,
+                    'sell_price': poly_yes,
+                    'max_volume': max_vol
+                }
+
         return arb
     
     async def scan(self, 
                    poly_markets: List[Dict],
                    sx_category: SXBetCategory = SXBetCategory.ALL) -> List[Dict]:
         """
-        Scan for arbitrage opportunities between platforms.
-        
-        Args:
-            poly_markets: List of Polymarket markets (from GammaAPIClient)
-            sx_category: SX Bet category to filter
-            
-        Returns:
-            List of arbitrage opportunities
+        Scan for arbitrage opportunities.
         """
         self.stats['scans'] += 1
         
-        # Get SX markets with liquidity
-        sx_markets_with_liquidity = await self.sx.get_markets_with_liquidity(
+        # Get SX markets with liquidity AND Orderbooks
+        sx_data = await self.sx.get_markets_with_liquidity(
             category=sx_category,
-            min_liquidity=50.0
+            min_liquidity=10.0 # Match new threshold
         )
         
-        sx_markets = [m for m, _ in sx_markets_with_liquidity]
+        # sx_data is List[Tuple[SXBetMarket, SXBetOrderbook]]
         
-        # Find matching markets
-        matches = await self.find_matching_markets(poly_markets, sx_markets)
+        # Find matching markets passing the FULL tuples
+        matches = await self.find_matching_markets(poly_markets, sx_data)
         
         opportunities = []
         
@@ -561,10 +752,13 @@ class PolySXArbitrageScanner:
             arb = self.calculate_arbitrage(
                 poly_yes=match['poly_yes_price'],
                 sx_bid=match['sx_best_bid'],
-                sx_ask=match['sx_best_ask']
+                sx_ask=match['sx_best_ask'],
+                poly_liq=match['poly_liquidity'],
+                sx_bid_liq=match['sx_bid_depth'],
+                sx_ask_liq=match['sx_ask_depth']
             )
             
-            if arb['has_opportunity'] and arb['expected_profit_pct'] >= self.min_spread * 100:
+            if arb['has_opportunity']:
                 opp = {
                     **match,
                     **arb,

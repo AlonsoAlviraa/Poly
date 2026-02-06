@@ -21,6 +21,11 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from collections import defaultdict
+import warnings
+
+# Suppress warnings from sentence-transformers about position_ids
+warnings.filterwarnings("ignore", category=UserWarning, module='torch')
+warnings.filterwarnings("ignore", message=".*position_ids.*")
 
 logger = logging.getLogger(__name__)
 

@@ -6,6 +6,9 @@ Enhanced with advanced filtering, caching, and market scoring.
 
 import logging
 import time
+import json
+import asyncio
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
@@ -50,6 +53,32 @@ class GammaAPIClient:
         """Cache a response."""
         self._cache[key] = data
         self._last_fetch[key] = time.time()
+
+    def parse_polymarket_event_date(self, event_json: Dict) -> Optional[datetime]:
+        """
+        Unified Polymarket Date Parsing.
+        Priority: gameStartTime > startDate > endDate.
+        """
+        # Look in root or first market
+        first_m = event_json.get('markets', [{}])[0] if isinstance(event_json.get('markets'), list) else {}
+        
+        date_str = (
+            event_json.get('gameStartTime') or 
+            first_m.get('gameStartTime') or 
+            event_json.get('startDate') or 
+            event_json.get('endDate')
+        )
+        
+        if not date_str:
+            return None
+            
+        try:
+            # Handle ISO or "2026-02-07 15:00:00+00" formats
+            clean_str = date_str.replace(' ', 'T').replace('Z', '+00:00')
+            return datetime.fromisoformat(clean_str)
+        except Exception as e:
+            logger.warning(f"Failed to parse date '{date_str}': {e}")
+            return None
         
     def get_markets(self, 
                     closed: Optional[bool] = False,
@@ -99,138 +128,258 @@ class GammaAPIClient:
     
     TAG_GAME_BET = "100639"  # Magic filter for match bets only
     
-    SERIES_IDS = {
-        'nba': '10345',
-        'premier_league': '10340', 
-        'nfl': '10339',
-        'champions_league': '10341',
-        'la_liga': '10342',
-        'serie_a': '10343',
-        'bundesliga': '10344',
-    }
+    # BROADENING: Inclusion of specific sports tags for maximum coverage
+    # BROADENING: Inclusion of specific sports tags for maximum coverage
+    TARGET_TAGS = [
+        "10345",  # NBA
+        "100032", # Soccer (General)
+        "10340",  # Premier League
+        "10342",  # La Liga
+        "10343",  # Serie A
+        "10344",  # Bundesliga
+        "10341",  # UCL
+        "100008", # Tennis
+        "10339",  # NFL
+        "10271",  # NHL
+        "10346",  # Baseball
+        "10672",  # Cricket
+        "10349",  # NCAA Basketball
+        "10452",  # EuroLeague
+        "100109", # Basketball General
+        "100127", # Tennis ATP (NEW)
+        "100128", # Tennis WTA (NEW)
+        "100028", # WNBA (NEW)
+        "100650", # ITF Tennis (NEW)
+        "100639", # Game Bets (General Rescue)
+    ]
     
     def get_match_events(self, 
                          series_id: Optional[str] = None,
                          limit: int = 200) -> List[Dict]:
         """
         🎯 Fetch ONLY match odds (No Futures) from Polymarket.
-        
-        This is the PRO filter that eliminates "Will X win 2026 World Cup?"
-        and gives us only "Team A vs Team B" individual match bets.
-        
-        Args:
-            series_id: Optional filter by league (use SERIES_IDS values)
-            limit: Max events to fetch
-            
-        Returns:
-            List of match events (not markets) with their question, outcomes, etc.
         """
-        cache_key = f"match_events_{series_id}_{limit}"
-        cached = self._get_cached(cache_key)
-        if cached:
-            return cached
-        
-        # Use /events endpoint with tag filter
         params = {
-            "tag_id": self.TAG_GAME_BET,  # THE CRITICAL FILTER
+            "tag_id": self.TAG_GAME_BET,
             "active": "true",
             "closed": "false",
-            "order": "startDate",  # Closest matches first
+            "order": "startDate",
             "ascending": "true",
             "limit": limit
         }
-        
-        if series_id:
-            params["series_id"] = series_id
+        if series_id: params["series_id"] = series_id
         
         try:
             with get_httpx_client(timeout=self.timeout, http2=True) as client:
                 resp = client.get(f"{self.BASE_URL}/events", params=params)
                 resp.raise_for_status()
-                events = resp.json()
-                
-                logger.info(f"[Polymarket] 🎯 Found {len(events)} MATCH EVENTS (Game Bets only)")
-                
-                self._set_cache(cache_key, events)
-                return events
-        except Exception as e:
-            logger.error(f"Gamma API events error: {e}")
-            return []
-    
-    def get_all_match_markets(self, limit: int = 300) -> List[Dict]:
-        """
-        🎯 Fetch all Game Bet markets directly with pricing data.
-        """
-        logger.info(f"[Polymarket] Fetching Game Bets with tag_id={self.TAG_GAME_BET}...")
-        
-        # Fetch markets with the match tag
-        raw_markets = self.get_markets(
-            closed=False, 
-            limit=limit, 
-            order="volume", 
-            tag_id=self.TAG_GAME_BET
-        )
-        
-        logger.info(f"[Polymarket] Raw markets from API: {len(raw_markets)}")
-        
-        markets = []
-        for m in raw_markets:
-            # Handle outcomes/prices format
-            outcomes = m.get('outcomes', [])
-            prices = m.get('outcomePrices', [])
-            
-            # More robust parsing for outcomes/prices
-            def smart_parse(val):
-                import ast
-                if not val: return []
-                if isinstance(val, list):
-                    if len(val) == 1 and isinstance(val[0], str):
-                        return smart_parse(val[0])
-                    # If it's already a list and not just one string inside, it's likely already parsed
-                    return val
-                
-                if isinstance(val, str):
-                    val = val.strip()
-                    if not (val.startswith('[') or val.startswith('{')):
-                        return [val] # Single value
-                    try:
-                        return json.loads(val)
-                    except:
-                        try:
-                            return ast.literal_eval(val)
-                        except:
-                            return [val]
-                return val
+                return resp.json()
+        except: return []
 
-            outcomes = smart_parse(m.get('outcomes', []))
-            prices = smart_parse(m.get('outcomePrices', []))
-            
-            # Map to standard 'tokens' format for compatibility
-            if outcomes and prices and len(outcomes) >= 2:
-                tokens = []
-                for i in range(len(outcomes)):
-                    price = prices[i] if i < len(prices) else 0
-                    try:
-                        tokens.append({
-                            'outcome': outcomes[i],
-                            'price': float(price)
-                        })
-                    except:
-                        logger.error(f"Error converting price '{price}' (type {type(price)}) to float for market {m.get('id')}. Outcomes: {outcomes}, Prices: {prices}")
-                        # Skip this market
-                        tokens = []
-                        break
-                if tokens:
-                    m['tokens'] = tokens
-                    m['_is_match'] = True
-                    markets.append(m)
-            elif m.get('tokens'):
-                # Already has tokens format
-                m['_is_match'] = True
-                markets.append(m)
+    async def get_all_match_markets(self, limit: int = 1000) -> List[Dict]:
+        """
+        🎯 OPEN THE TAP: Fetch all match markets across multiple categories with Parallelism.
+        """
+        limit_per_tag = limit
+        logger.info(f"[Polymarket] 🌊 OPENING THE TAP - Broad Ingestion Pattern (Parallel)...")
         
-        logger.info(f"[Polymarket] Found {len(markets)} Game Bet markets with processed tokens")
-        return markets
+        self.discard_stats = {
+            "no_category": 0, "expired_date": 0, "no_tokens": 0, "total_raw": 0
+        }
+        
+        all_markets = []
+        unique_market_ids = set()
+        
+        seen_ids = set()
+        loop = asyncio.get_event_loop()
+
+        # 1. Scrape specific tags
+        async def scrape_tag(tag):
+            tag_markets = []
+            offset = 0
+            while offset < limit_per_tag:
+                raw_page = await loop.run_in_executor(None, lambda: self.get_markets(
+                    closed=False, limit=100, offset=offset, order="volume", tag_id=tag
+                ))
+                if not raw_page: break
+                
+                self.discard_stats["total_raw"] += len(raw_page)
+                for m in raw_page:
+                    processed = self._process_market(m)
+                    if processed:
+                        tag_markets.append(processed)
+                
+                if len(raw_page) < 100: break
+                offset += 100
+            return tag_markets
+
+        # 2. Add a BROAD VOLUME SCRAPE (NEW)
+        async def scrape_top_volume():
+            top_markets = []
+            offset = 0
+            while offset < 2000: # Fetch top 2000 markets globally
+                raw_page = await loop.run_in_executor(None, lambda: self.get_markets(
+                    closed=False, limit=100, offset=offset, order="volume"
+                ))
+                if not raw_page: break
+                self.discard_stats["total_raw"] += len(raw_page)
+                for m in raw_page:
+                    processed = self._process_market(m)
+                    if processed: top_markets.append(processed)
+                if len(raw_page) < 100: break
+                offset += 100
+            return top_markets
+
+        # Concurrent Scraping
+        tasks = [scrape_tag(tag) for tag in self.TARGET_TAGS]
+        tasks.append(scrape_top_volume())
+        
+        results = await asyncio.gather(*tasks)
+        
+        for batch in results:
+            for m in batch:
+                m_id = str(m.get('id', ''))
+                if m_id not in seen_ids:
+                    all_markets.append(m)
+                    seen_ids.add(m_id)
+        
+        logger.info(f"[Polymarket] ✅ INGESTION COMPLETE: {len(all_markets)} valid entries.")
+        return all_markets
+
+    def _infer_category_from_metadata(self, m: Dict) -> Optional[str]:
+        """🎯 CATEGORY RESCUE: Infer sport/category from metadata."""
+        tags = m.get('tags', []) or []
+        tag_ids = [str(t.get('id')) if isinstance(t, dict) else str(t) for t in tags]
+        
+        tag_map = {
+            '10345': 'Basketball', '10339': 'American Football', '10346': 'Baseball',
+            '100032': 'Soccer', '10340': 'Soccer', '10341': 'Soccer', '10342': 'Soccer',
+            '100008': 'Tennis', '10271': 'Ice Hockey', '10672': 'Cricket'
+        }
+        for tid, sport in tag_map.items():
+            if tid in tag_ids: return sport
+
+        slug = f"{m.get('slug', '')} {m.get('question', '')}".lower()
+        
+        # 🎾 TENNIS RESCUE (Aggressive but safe)
+        tennis_keywords = ['tennis', 'atp', 'wta', 'australian-open', 'french-open', 'wimbledon', 'us-open', 'match odds', 'set betting', 'games handicap']
+        tennis_players = [
+            'nadal', 'alcaraz', 'djokovic', 'sinner', 'medvedev', 'zverev', 'tsitsipas', 
+            'ruud', 'rublev', 'hurkacz', 'norrie', 'draper', 'fritz', 'tiafoe', ' Shelton',
+            'sabalenka', 'swiatek', 'gauff', 'rybakina', 'pegula', 'jabeur', 'paolini'
+        ]
+        # 🏀 BASKETBALL RESCUE
+        basket_keywords = ['nba', 'basketball', 'wnba', 'ncaa', 'euroleague', 'march madness', 'college basketball', 'league pass', 'points spread']
+        basket_teams = [
+            'lakers', 'warriors', 'celtics', 'knicks', '76ers', 'suns', 'bucks', 'clippers', 'nuggets',
+            'baskonia', 'barcelona', 'madrid', 'monaco', 'olimpiacos', 'panathinaikos', 'virtus', 'zalgiris'
+        ]
+        tennis_blacklist = ['table tennis', 'ping pong', 'padel', 'esports', 'cyber', 'simulated', 'e-soccer', 'efootball']
+        
+        is_tennis = any(k in slug for k in tennis_keywords) or any(p in slug for p in tennis_players)
+        is_fake_tennis = any(b in slug for b in tennis_blacklist)
+        
+        if is_tennis and not is_fake_tennis:
+            return 'Tennis'
+
+        rules = [
+            (['soccer', 'premier-league', 'la-liga', 'football', 'bundesliga', 'serie-a'], 'Soccer'),
+            (['nba', 'basketball', 'euroleague', 'wnba'], 'Basketball'),
+            (['nhl', 'hockey'], 'Ice Hockey'),
+            (['mlb', 'baseball'], 'Baseball'),
+            (['nfl', 'american-football'], 'American Football'),
+            (['ufc', 'boxing', 'mma'], 'Martial Arts'),
+            (['f1', 'formula-1'], 'Motorsports'),
+            (['politics', 'election', 'trump', 'kamala', 'harris'], 'Politics'),
+            (['crypto', 'bitcoin', 'eth', 'solana'], 'Crypto'),
+            (['oscar', 'grammy', 'movie', 'rot-tom'], 'Pop Culture')
+        ]
+        for keywords, sport in rules:
+            if any(k in slug for k in keywords): return sport
+        return 'Other' # Fallback for remaining Game Bets
+
+    def _process_market(self, m: Dict, forced_category: Optional[str] = None) -> Optional[Dict]:
+        """Internal helper to parse, filter and score a single market."""
+        try:
+            event_date = self.parse_polymarket_event_date(m)
+            if not event_date: return None
+            
+            # UTC Safety: ensure comparison is with aware datetime
+            now_utc = datetime.now(timezone.utc)
+            if event_date.tzinfo is None:
+                event_date = event_date.replace(tzinfo=timezone.utc)
+
+            # RELAXED EXPIRATION: 6 hours grace for sports, 24 hours for others
+            inferred_cat = self._infer_category_from_metadata(m) or ''
+            is_sport = any(x in inferred_cat.lower() for x in ['soccer', 'basketball', 'tennis', 'hockey', 'baseball', 'football'])
+            grace_period = 21600 if is_sport else 86400 # 6h vs 24h
+            
+            if event_date.timestamp() < (now_utc.timestamp() - grace_period):
+                self.discard_stats["expired_date"] += 1
+                return None
+            
+            m['_event_date_parsed'] = event_date
+            m['startDate'] = event_date.isoformat()
+
+            cat = (m.get('category', '') or '').lower()
+            if forced_category: cat = forced_category.lower()
+            
+            # If still missing or overly generic, rescue
+            if not cat or cat in ['game-bet', 'special', 'other']:
+                inferred = self._infer_category_from_metadata(m)
+                if inferred: cat = inferred.lower()
+
+            final_cat = None
+            if any(x in cat for x in ['soccer', 'football']): final_cat = 'Soccer'
+            elif any(x in cat for x in ['nba', 'basketball']): final_cat = 'Basketball'
+            elif any(x in cat for x in ['tennis']): final_cat = 'Tennis'
+            elif any(x in cat for x in ['hockey']): final_cat = 'Ice Hockey'
+            elif any(x in cat for x in ['baseball', 'mlb']): final_cat = 'Baseball'
+            elif any(x in cat for x in ['american football']): final_cat = 'American Football'
+            elif 'politics' in cat: final_cat = 'Politics'
+            elif 'crypto' in cat: final_cat = 'Crypto'
+            else: final_cat = cat.title() if cat else 'Other'
+            
+            m['category'] = final_cat
+
+            # --- ROBUST PRICE EXTRACTION ---
+            tokens = m.get('tokens')
+            try:
+                if not tokens and m.get('outcomes') and m.get('outcomePrices'):
+                    outcomes = self._smart_parse(m['outcomes'])
+                    prices = self._smart_parse(m['outcomePrices'])
+                    clob_ids = self._smart_parse(m.get('clobTokenIds', []))
+                    if outcomes and len(outcomes) >= 2:
+                        tokens = []
+                        for i in range(len(outcomes)):
+                            try:
+                                tokens.append({
+                                    'outcome': outcomes[i],
+                                    'price': float(prices[i]) if i < len(prices) else 0.0,
+                                    'token_id': clob_ids[i] if i < len(clob_ids) else ''
+                                })
+                            except: continue
+                
+                if not tokens or len(tokens) < 2:
+                    self.discard_stats["no_tokens"] += 1
+                    return None
+                    
+                m['tokens'] = tokens
+                m['_is_match'] = True
+                return m
+            except:
+                self.discard_stats["no_tokens"] += 1
+                return None
+        except: return None
+
+    def _smart_parse(self, val):
+        import ast
+        if not val: return []
+        if isinstance(val, list): return val
+        try: return json.loads(val)
+        except:
+            try: return ast.literal_eval(val)
+            except: return [val]
     
     def get_filtered_markets(self, 
                              filters: MarketFilters,
@@ -423,6 +572,8 @@ class GammaAPIClient:
             'cache_ttl': self.cache_ttl
         }
 
+# Alias for backward compatibility
+GammaClient = GammaAPIClient
 
 def test_gamma_api():
     """Test the Gamma API connection and market discovery."""
@@ -463,11 +614,13 @@ def test_gamma_api():
     
     # Test 2: Events
     print("\n" + "=" * 70)
-    print("[2] Fetching OPEN events...")
-    events = client.get_events(closed=False, limit=5)
-    print(f"    Retrieved: {len(events)} events")
+    print("[2] Fetching OPEN events MATCH EVENTS (STRICT MODE)...")
+    # Using get_match_events specifically since that's what we modified
+    events = client.get_match_events(limit=5)
+
+    print(f"    Retrieved: {len(events)} filtered events")
     
-    for e in events[:3]:
+    for e in events[:5]:
         title = e.get("title", "N/A")[:50]
         print(f"    - {title}...")
     
