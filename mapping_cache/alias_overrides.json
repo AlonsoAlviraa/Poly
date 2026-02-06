@@ -1,0 +1,14 @@
+{
+    "soccer": {
+        "man utd": "Manchester United",
+        "man city": "Manchester City",
+        "psg": "Paris Saint Germain",
+        "atleti": "Atletico Madrid",
+        "barca": "Barcelona"
+    },
+    "tennis": {
+        "djokovic": "Novak Djokovic",
+        "nadal": "Rafael Nadal",
+        "sinner": "Jannik Sinner"
+    }
+}

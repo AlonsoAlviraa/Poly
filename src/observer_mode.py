@@ -348,6 +348,7 @@ class ObserverMode:
                         'event_id': ev.get('id'),
                         'market_id': m.get('marketId'), # CRITICAL: We now have the Market ID
                         'name': ev.get('name'),
+                        'competition': m.get('competition', {}).get('name', ''),
                         'open_date': m.get('marketStartTime'),
                         'market_type': m.get('description', {}).get('marketType', 'MATCH_ODDS'),
                         'runners': m.get('runners', []),

@@ -61,7 +61,6 @@ class SXBetCategory(Enum):
 class SXBetMarket:
     """Representation of an SX Bet market."""
     market_hash: str
-    market_hash: str
     label: str
     market_key: str # Added for semantic filtering (e.g. 'game_winner')
     sport_label: str
