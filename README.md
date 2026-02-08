@@ -65,6 +65,18 @@ python main.py --mode mega-audit
 python main.py --mode scanner
 ```
 
+## 📚 Project Documentation
+
+Explore the project's technical depth and roadmap:
+- **[Architecture](docs/architecture.md)**: Deep dive into the Graph Resolution Engine and high-level design.
+- **[Migration Plan](docs/migration_plan.md)**: The technical roadmap for the Kalshi-Polymarket pivot.
+- **[Project Status](docs/project_status.md)**: Current state of the build and recent wins.
+- **[Roadmap](docs/roadmap.md)**: Upcoming milestones (Feb-Mar 2026).
+- **[Backlog (PRO)](docs/backlog.md)**: Pending high-priority tasks and professional upgrades.
+- **[Data Quality](docs/data_quality.md)**: Metrics on entity resolution and logic hardening.
+- **[Walkthrough](docs/walkthrough.md)**: A step-by-step summary of the project's evolution.
+
+
 ## 📁 Repository Structure
 
 ```
