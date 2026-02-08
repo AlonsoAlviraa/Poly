@@ -49,6 +49,6 @@ src/data/mappings.json.bak
 # Project Specific
 tmp/
 .gemini/
-brain/
+# brain/
 *.html
 *.webp
