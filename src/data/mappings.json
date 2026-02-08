@@ -1347,6 +1347,12 @@
         ],
         "Jaylen Brown: Points O/U 29.5": [
             "Brown"
+        ],
+        "Heat vs. Celtics": [
+            "Miami Heat @ Boston Celtics"
+        ],
+        "Clippers vs. Kings": [
+            "Los Angeles Clippers @ Sacramento Kings"
         ]
     },
     "esports": {
@@ -3219,7 +3225,8 @@
             "Central Cordoba (SdE) v Union Santa Fe"
         ],
         "Will Torino FC win on 2026-02-07?": [
-            "Fiorentina v Torino"
+            "Fiorentina v Torino",
+            "Torino"
         ],
         "Spread: Atalanta BC (-1.5)": [
             "Atalanta v US Cremonese"
@@ -3351,7 +3358,8 @@
         ],
         "Will Levante UD win on 2026-02-08?": [
             "Athletic Bilbao v Levante",
-            "Levante"
+            "Levante",
+            "Athletic Bilbao vs Levante"
         ],
         "Will Burnley FC win on 2026-02-07?": [
             "Burnley v West Ham",
@@ -3363,7 +3371,8 @@
         ],
         "Will Swansea City AFC win on 2026-02-08?": [
             "Swansea v Sheff Wed",
-            "Swansea"
+            "Swansea",
+            "Swansea City"
         ],
         "Will FC Augsburg win on 2026-02-07?": [
             "Mainz v Augsburg"
@@ -3446,21 +3455,24 @@
             "AC Milan"
         ],
         "Will Angers SCO vs. Toulouse FC end in a draw?": [
-            "Angers v Toulouse"
+            "Angers v Toulouse",
+            "Angers SC vs Toulouse"
         ],
         "Will Chelsea FC win on 2026-02-10?": [
             "Chelsea v Leeds",
             "Chelsea"
         ],
         "Will OGC Nice vs. AS Monaco FC end in a draw?": [
-            "Nice v Monaco"
+            "Nice v Monaco",
+            "Nice vs AS Monaco FC"
         ],
         "Will Valencia CF win on 2026-02-15?": [
             "Levante v Valencia"
         ],
         "Will RCD Mallorca win on 2026-02-07?": [
             "Barcelona v Mallorca",
-            "Mallorca"
+            "Mallorca",
+            "Barcelona FC vs Mallorca"
         ],
         "Will FC Bayern München vs. TSG 1899 Hoffenheim end in a draw?": [
             "Bayern Munich v Hoffenheim",
@@ -3497,10 +3509,12 @@
         ],
         "Will SC Heerenveen win on 2026-02-07?": [
             "FC Twente v Heerenveen",
-            "Heerenveen"
+            "Heerenveen",
+            "FC Twente vs SC Heerenveen"
         ],
         "Will Burnley FC vs. West Ham United FC end in a draw?": [
-            "Burnley v West Ham"
+            "Burnley v West Ham",
+            "Burnley vs West Ham United"
         ],
         "Will FC Metz vs. AJ Auxerre end in a draw?": [
             "Metz v Auxerre"
@@ -3510,7 +3524,8 @@
         ],
         "Will Real Madrid CF win on 2026-02-08?": [
             "Valencia v Real Madrid",
-            "Real Madrid"
+            "Real Madrid",
+            "Valencia vs Real Madrid"
         ],
         "Will SC Braga vs. Rio Ave FC end in a draw?": [
             "Braga v Rio Ave"
@@ -3530,10 +3545,12 @@
             "Carabobo FC v Huachipato"
         ],
         "Will Le Havre AC vs. RC Strasbourg Alsace end in a draw?": [
-            "Le Havre v Strasbourg"
+            "Le Havre v Strasbourg",
+            "Le Havre vs Strasbourg"
         ],
         "Will Real Sociedad de Fútbol vs. Elche CF end in a draw?": [
-            "Real Sociedad v Elche"
+            "Real Sociedad v Elche",
+            "Real Sociedad vs Elche"
         ],
         "Will Coventry City FC win on 2026-02-07?": [
             "Coventry v Oxford Utd"
@@ -3556,13 +3573,16 @@
             "NAC Breda vs Excelsior Rotterdam FC"
         ],
         "Will ACF Fiorentina vs. Torino FC end in a draw?": [
-            "Fiorentina v Torino"
+            "Fiorentina v Torino",
+            "Fiorentina vs Torino"
         ],
         "Will Juventus FC vs. SS Lazio end in a draw?": [
-            "Juventus v Lazio"
+            "Juventus v Lazio",
+            "Juventus vs Lazio"
         ],
         "Will Derby County FC vs. Ipswich Town FC end in a draw?": [
-            "Derby v Ipswich"
+            "Derby v Ipswich",
+            "Derby County vs Ipswich Town"
         ],
         "Will US Cremonese win on 2026-02-15?": [
             "US Cremonese v Genoa",
@@ -3604,20 +3624,23 @@
             "El Gounah v Modern Sport FC"
         ],
         "Will Coventry City FC vs. Oxford United FC end in a draw?": [
-            "Coventry v Oxford Utd"
+            "Coventry v Oxford Utd",
+            "Coventry City vs Oxford United"
         ],
         "Will Leeds United FC vs. Nottingham Forest FC end in a draw?": [
             "Leeds v Nottm Forest",
             "Leeds United vs Nottingham Forest"
         ],
         "Will Wrexham AFC vs. Millwall FC end in a draw?": [
-            "Wrexham v Millwall"
+            "Wrexham v Millwall",
+            "Wrexham vs Millwall FC"
         ],
         "Will Newcastle United FC win on 2026-02-10?": [
             "Tottenham v Newcastle"
         ],
         "Will 1. FSV Mainz 05 vs. FC Augsburg end in a draw?": [
-            "Mainz v Augsburg"
+            "Mainz v Augsburg",
+            "FSV Mainz vs FC Augsburg"
         ],
         "Will AJ Auxerre vs. Paris FC end in a draw?": [
             "Auxerre v Paris FC"
@@ -3642,7 +3665,8 @@
             "Benfica v Real Madrid"
         ],
         "Will FC St. Pauli 1910 vs. VfB Stuttgart end in a draw?": [
-            "St Pauli v Stuttgart"
+            "St Pauli v Stuttgart",
+            "FC St. Pauli vs VfB Stuttgart"
         ],
         "Pacers vs. Bucks": [
             "Indiana Pacers @ Milwaukee Bucks"
@@ -3803,7 +3827,8 @@
         ],
         "Will Deportivo Alavés win on 2026-02-08?": [
             "Deportivo v Albacete",
-            "Deportivo"
+            "Deportivo",
+            "Deportivo Alaves"
         ],
         "Will CA Barracas Central win on 2026-02-09?": [
             "Barracas Central v Gimnasia La Plata",
@@ -3820,11 +3845,13 @@
         ],
         "Will RC Strasbourg Alsace win on 2026-02-08?": [
             "Le Havre v Strasbourg",
-            "Strasbourg"
+            "Strasbourg",
+            "Le Havre vs Strasbourg"
         ],
         "Will RB Leipzig win on 2026-02-08?": [
             "FC Koln v RB Leipzig",
-            "RB Leipzig"
+            "RB Leipzig",
+            "1. FC Koln vs RB Leipzig"
         ],
         "Will Granada CF win on 2026-02-06?": [
             "Leganes v Granada"
@@ -3878,10 +3905,12 @@
             "Mirassol v Cruzeiro MG"
         ],
         "Will SC Freiburg vs. SV Werder Bremen end in a draw?": [
-            "Freiburg v Werder Bremen"
+            "Freiburg v Werder Bremen",
+            "Sport-Club Freiburg vs SV Werder Bremen"
         ],
         "Will Ipswich Town FC win on 2026-02-07?": [
-            "Ipswich"
+            "Ipswich",
+            "Derby County vs Ipswich Town"
         ],
         "Will Deportivo Toluca FC win on 2026-02-07?": [
             "Deportivo"
@@ -3905,7 +3934,8 @@
             "AFC Bournemouth vs Aston Villa"
         ],
         "Spread: Crystal Palace FC (-2.5)": [
-            "Crystal Palace"
+            "Crystal Palace",
+            "Brighton and Hove Albion vs Crystal Palace"
         ],
         "Brighton & Hove Albion FC vs. Crystal Palace FC: O/U 3.5": [
             "Brighton and Hove Albion vs Crystal Palace"
@@ -3914,7 +3944,8 @@
             "Celta de Vigo vs Osasuna"
         ],
         "Spread: Real Madrid CF (-1.5)": [
-            "Real Madrid"
+            "Real Madrid",
+            "Valencia vs Real Madrid"
         ],
         "Hellas Verona FC vs. Pisa SC: O/U 3.5": [
             "Hellas Verona vs Pisa"
@@ -3967,7 +3998,8 @@
             "Fortuna Sittard vs Sparta Rotterdam"
         ],
         "Jaxon Smith-Njigba: Receiving Yards O/U 90.5": [
-            "Jaxon Smith-Njigba"
+            "Jaxon Smith-Njigba",
+            "Receiving Yards vs Jaxon Smith-Njigba"
         ],
         "FC Bayern München vs. TSG 1899 Hoffenheim: O/U 4.5": [
             "FC Bayern Munich vs TSG 1899 Hoffenheim"
@@ -3985,7 +4017,8 @@
             "Leeds United vs Nottingham Forest"
         ],
         "Spread: CF Estrela da Amadora (-2.5)": [
-            "Estrela Amadora"
+            "Estrela Amadora",
+            "Estrela Amadora vs Santa Clara"
         ],
         "ACF Fiorentina vs. Torino FC: O/U 4.5": [
             "Fiorentina vs Torino"
@@ -4018,7 +4051,8 @@
             "Le Havre vs Strasbourg"
         ],
         "Kenneth Walker III: First Touchdown": [
-            "Kenneth Walker III"
+            "Kenneth Walker III",
+            "Anytime Touchdown Scorer vs Kenneth Walker III"
         ],
         "Manchester United FC vs. Tottenham Hotspur FC: O/U 3.5": [
             "Manchester United vs Tottenham Hotspur"
@@ -4030,7 +4064,8 @@
             "Anytime Touchdown Scorer vs Kayshon Boutte"
         ],
         "Jaxon Smith-Njigba: First Touchdown": [
-            "Jaxon Smith-Njigba"
+            "Jaxon Smith-Njigba",
+            "Anytime Touchdown Scorer vs Jaxon Smith-Njigba"
         ],
         "AJ Barner: First Touchdown": [
             "Anytime Touchdown Scorer vs AJ Barner"
@@ -4039,7 +4074,8 @@
             "New England Patriots vs Seattle Seahawks"
         ],
         "Spread: RC Strasbourg Alsace (-1.5)": [
-            "Strasbourg"
+            "Strasbourg",
+            "Le Havre vs Strasbourg"
         ],
         "Seahawks vs. Patriots: 1H O/U 21.5": [
             "New England Patriots vs Seattle Seahawks"
@@ -4054,7 +4090,8 @@
             "Elche"
         ],
         "Spread: Valencia CF (-2.5)": [
-            "Valencia"
+            "Valencia",
+            "Valencia vs Real Madrid"
         ],
         "Norwich City FC vs. Blackburn Rovers FC: O/U 3.5": [
             "Norwich City vs Blackburn Rovers"
@@ -4081,19 +4118,22 @@
             "Daniil Donchenko"
         ],
         "Spread: West Ham United FC (-2.5)": [
-            "West Ham United"
+            "West Ham United",
+            "Burnley vs West Ham United"
         ],
         "Will Wang Cong win by KO or TKO?": [
             "Cong Wang"
         ],
         "Cooper Kupp: Receiving Yards O/U 29.5": [
-            "Cooper Kupp"
+            "Cooper Kupp",
+            "Receiving Yards vs Cooper Kupp"
         ],
         "Paris Saint-Germain FC vs. Olympique de Marseille: Both Teams to Score": [
             "Paris Saint Germain vs Olympique Marseille"
         ],
         "Kenneth Walker III: Rushing Yards O/U 80.5": [
-            "Kenneth Walker III"
+            "Kenneth Walker III",
+            "Rushing Yards vs Kenneth Walker III"
         ],
         "FC Barcelona vs. RCD Mallorca: Both Teams to Score": [
             "Barcelona FC vs Mallorca"
@@ -4117,7 +4157,8 @@
             "New England Patriots vs Seattle Seahawks"
         ],
         "Will Sevilla FC vs. Girona FC end in a draw?": [
-            "Sevilla v Girona"
+            "Sevilla v Girona",
+            "Sevilla vs Girona"
         ],
         "Loyola Chicago Ramblers vs. Davidson Wildcats: O/U 138.5": [
             "Davidson Wildcats vs Loyola Chicago Ramblers"
@@ -4132,7 +4173,8 @@
             "Toulouse"
         ],
         "Spread: Levante UD (-1.5)": [
-            "Levante"
+            "Levante",
+            "Athletic Bilbao vs Levante"
         ],
         "Connecticut Huskies vs. St. John's Red Storm": [
             "St. John's vs University of Connecticut Huskies"
@@ -4165,7 +4207,8 @@
             "Eintracht Frankfurt"
         ],
         "Spread: Manchester United FC (-1.5)": [
-            "Manchester United"
+            "Manchester United",
+            "Manchester United vs Tottenham Hotspur"
         ],
         "Brown Bears vs. Yale Bulldogs": [
             "Yale vs Brown"
@@ -4199,7 +4242,8 @@
             "Wolfsburg"
         ],
         "Spread: Newcastle United FC (-2.5)": [
-            "Newcastle United"
+            "Newcastle United",
+            "Newcastle United vs Brentford"
         ],
         "1. FC Union Berlin vs. Eintracht Frankfurt: O/U 3.5": [
             "Union Berlin vs Eintracht Frankfurt"
@@ -4235,13 +4279,115 @@
             "Leeds United vs Nottingham Forest"
         ],
         "Will Hellas Verona FC vs. Pisa SC end in a draw?": [
-            "Verona v Pisa"
+            "Verona v Pisa",
+            "Hellas Verona vs Pisa"
         ],
         "Will Juventus FC win on 2026-02-08?": [
             "Juventus"
         ],
         "Charlton Athletic FC vs. Queens Park Rangers FC: O/U 1.5": [
             "Charlton Athletic vs Queens Park Rangers"
+        ],
+        "Spread: Connecticut Huskies (-1.5)": [
+            "St. John's vs University of Connecticut Huskies"
+        ],
+        "Spread: Chelsea FC (-2.5)": [
+            "Chelsea"
+        ],
+        "Brown Bears vs. Yale Bulldogs: O/U 139.5": [
+            "Yale vs Brown"
+        ],
+        "Hellas Verona FC vs. Pisa SC: O/U 1.5": [
+            "Hellas Verona vs Pisa"
+        ],
+        "Seahawks Team Total: O/U 20.5": [
+            "New England Patriots vs Seattle Seahawks"
+        ],
+        "FC St. Pauli 1910 vs. VfB Stuttgart: O/U 2.5": [
+            "FC St. Pauli vs VfB Stuttgart"
+        ],
+        "Will Real Zaragoza win on 2026-02-07?": [
+            "Zaragoza",
+            "Zaragoza v Eibar"
+        ],
+        "Mack Hollins: Anytime Touchdown": [
+            "Anytime Touchdown Scorer vs Mack Hollins"
+        ],
+        "Will Charlton Athletic FC vs. Queens Park Rangers FC end in a draw?": [
+            "Charlton Athletic vs Queens Park Rangers"
+        ],
+        "Will CF Estrela da Amadora win on 2026-02-07?": [
+            "Estrela Amadora"
+        ],
+        "Will RC Celta de Vigo vs. CA Osasuna end in a draw?": [
+            "Celta Vigo v Osasuna"
+        ],
+        "Spread: Northern Iowa Panthers (-3.5)": [
+            "Northern Iowa",
+            "Northern Iowa vs Bradley"
+        ],
+        "Will Stade Brestois 29 vs. FC Lorient end in a draw?": [
+            "Stade Brestois (Brest) vs Lorient"
+        ],
+        "Will FC Lorient win on 2026-02-07?": [
+            "Lorient"
+        ],
+        "Will Manchester City FC win on 2026-02-11?": [
+            "Man City"
+        ],
+        "UFC Fight Night: Mario Bautista vs. Vinicius Oliveira (Bantamweight, Main Card)": [
+            "Mario Bautista vs Vinicius De Oliveira"
+        ],
+        "Loyola Chicago Ramblers vs. Davidson Wildcats": [
+            "Davidson Wildcats vs Loyola Chicago Ramblers"
+        ],
+        "Will Olympiakós SFP vs. Bayer 04 Leverkusen end in a draw?": [
+            "Olympiakos v Leverkusen"
+        ],
+        "Spread: AFC Bournemouth (-2.5)": [
+            "AFC Bournemouth vs Aston Villa"
+        ],
+        "Will Middlesbrough FC win on 2026-02-09?": [
+            "Sheff Utd v Middlesbrough"
+        ],
+        "LoL: SK Gaming vs Shifters (BO1) - LEC Versus Regular Season": [
+            "SK Gaming vs Shifters"
+        ],
+        "Hunter Henry: Receiving Yards O/U 37.5": [
+            "Receiving Yards vs Hunter Henry"
+        ],
+        "US Sassuolo Calcio vs. FC Internazionale Milano: O/U 2.5": [
+            "Sassuolo Calcio vs Inter Milan"
+        ],
+        "LoL: Disguised vs LYON (BO3) - LCS Lock In Group Stage": [
+            "disguised vs Lyon Gaming"
+        ],
+        "Connecticut Huskies vs. St. John's Red Storm: O/U 143.5": [
+            "St. John's vs University of Connecticut Huskies"
+        ],
+        "Will CA River Plate win on 2026-02-07?": [
+            "River Plate v Tigre"
+        ],
+        "Burnley FC vs. West Ham United FC: Both Teams to Score": [
+            "Burnley vs West Ham United"
+        ],
+        "FC Nantes vs. Olympique Lyonnais: O/U 2.5": [
+            "FC Nantes vs Lyon"
+        ],
+        "Will Al Shabab Saudi Club win on 2026-02-07?": [
+            "Al-Kholood Club v Al-Shabab (KSA)"
+        ],
+        "LoL: Team Vitality vs Los Ratones (BO1) - LEC Versus Regular Season": [
+            "Team Vitality vs Los Ratones"
+        ],
+        "LoL: Karmine Corp Blue vs GIANTX (BO1) - LEC Versus Regular Season": [
+            "Karmine Corp Blue vs Giantx"
+        ],
+        "Will CA Central Córdoba vs. CA Unión end in a draw?": [
+            "Central Cordoba (SdE) v Union Santa Fe"
+        ],
+        "Spread: Real Sociedad de Fútbol (-2.5)": [
+            "Real Sociedad vs Elche"
         ]
     },
     "teams": {

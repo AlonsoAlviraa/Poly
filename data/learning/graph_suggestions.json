@@ -1,58 +1,98 @@
 [
   {
+    "poly_id": "1341909",
+    "poly_question": "Spread: Real Sociedad de F\u00fatbol B (-2.5)",
+    "exch_name": "Real Sociedad v Elche",
+    "score": 68.19999999999999,
+    "cluster_id": 2313641456160,
+    "avg_cluster_confidence": 67.16721311475409
+  },
+  {
+    "poly_id": "1267356",
+    "poly_question": "FC Andorra vs. Real Sociedad de F\u00fatbol B: O/U 3.5",
+    "exch_name": "Andorra CF v Sociedad B",
+    "score": 76.6,
+    "cluster_id": 2313641456160,
+    "avg_cluster_confidence": 67.16721311475409
+  },
+  {
     "poly_id": "1312092",
     "poly_question": "Real Madrid CF vs. Real Sociedad de F\u00fatbol: Both Teams to Score",
     "exch_name": "Real Madrid v Real Sociedad",
     "score": 81.5,
-    "cluster_id": 2148128911232,
-    "avg_cluster_confidence": 67.34833333333333
+    "cluster_id": 2313641456160,
+    "avg_cluster_confidence": 67.16721311475409
   },
   {
-    "poly_id": "1317246",
-    "poly_question": "T20 World Cup: England vs Nepal (Game 1) - Most Sixes Nepal Winner",
-    "exch_name": "England vs Wales",
+    "poly_id": "1311980",
+    "poly_question": "Will Real Madrid CF win on 2026-02-14?",
+    "exch_name": "Benfica v Real Madrid",
+    "score": 63.3,
+    "cluster_id": 2313641456160,
+    "avg_cluster_confidence": 67.16721311475409
+  },
+  {
+    "poly_id": "1292792",
+    "poly_question": "Seahawks vs. Patriots: 1H O/U 21.5",
+    "exch_name": "New England Patriots vs Seattle Seahawks",
     "score": 68.9,
-    "cluster_id": 2148153694176,
-    "avg_cluster_confidence": 68.9
+    "cluster_id": 2313641457280,
+    "avg_cluster_confidence": 68.2
+  },
+  {
+    "poly_id": "1269481",
+    "poly_question": "Seahawks vs. Patriots: 1H Moneyline",
+    "exch_name": "New England Patriots vs Seattle Seahawks",
+    "score": 67.5,
+    "cluster_id": 2313641457280,
+    "avg_cluster_confidence": 68.2
   },
   {
     "poly_id": "1317245",
     "poly_question": "T20 World Cup: England vs Nepal (Game 1) - Most Sixes Draw",
     "exch_name": "England vs Wales",
     "score": 68.9,
-    "cluster_id": 2148153694176,
+    "cluster_id": 2313642201312,
     "avg_cluster_confidence": 68.9
   },
   {
-    "poly_id": "1309607",
-    "poly_question": "Will Eintracht Frankfurt vs. Borussia M\u00f6nchengladbach end in a draw?",
-    "exch_name": "Union Berlin vs Eintracht Frankfurt",
+    "poly_id": "1317246",
+    "poly_question": "T20 World Cup: England vs Nepal (Game 1) - Most Sixes Nepal Winner",
+    "exch_name": "England vs Wales",
     "score": 68.9,
-    "cluster_id": 2148153320032,
-    "avg_cluster_confidence": 65.1421052631579
+    "cluster_id": 2313642201312,
+    "avg_cluster_confidence": 68.9
   },
   {
-    "poly_id": "1290394",
-    "poly_question": "Nottingham Forest FC vs. Wolverhampton Wanderers FC: O/U 2.5",
-    "exch_name": "Wolverhampton Wanderers vs Chelsea",
-    "score": 75.9,
-    "cluster_id": 2148129499264,
-    "avg_cluster_confidence": 71.81351351351351
+    "poly_id": "1341709",
+    "poly_question": "Spread: Real Oviedo (-2.5)",
+    "exch_name": "Rayo Vallecano vs Real Oviedo",
+    "score": 61.9,
+    "cluster_id": 2313641965408,
+    "avg_cluster_confidence": 64.58333333333333
   },
   {
-    "poly_id": "1324848",
-    "poly_question": "Girona FC vs. FC Barcelona: O/U 3.5",
-    "exch_name": "Girona v Barcelona",
-    "score": 80.8,
-    "cluster_id": 2148129622272,
-    "avg_cluster_confidence": 65.41627906976744
+    "poly_id": "1311958",
+    "poly_question": "Will Rayo Vallecano de Madrid vs. Club Atl\u00e9tico de Madrid end in a draw?",
+    "exch_name": "Rayo Vallecano v Atletico Madrid",
+    "score": 70.3,
+    "cluster_id": 2313641965408,
+    "avg_cluster_confidence": 64.58333333333333
   },
   {
     "poly_id": "1311970",
     "poly_question": "Will Sevilla FC vs. Deportivo Alav\u00e9s end in a draw?",
     "exch_name": "Sevilla vs Girona",
     "score": 66.8,
-    "cluster_id": 2148129622272,
+    "cluster_id": 2313641956448,
+    "avg_cluster_confidence": 65.41627906976744
+  },
+  {
+    "poly_id": "1324848",
+    "poly_question": "Girona FC vs. FC Barcelona: O/U 3.5",
+    "exch_name": "Girona v Barcelona",
+    "score": 80.8,
+    "cluster_id": 2313641956448,
     "avg_cluster_confidence": 65.41627906976744
   },
   {
@@ -60,7 +100,7 @@
     "poly_question": "Perth Glory FC vs. Newcastle United Jets FC: O/U 3.5",
     "exch_name": "Newcastle United vs Brentford",
     "score": 70.3,
-    "cluster_id": 2148157670112,
+    "cluster_id": 2313641345088,
     "avg_cluster_confidence": 68.43333333333332
   },
   {
@@ -68,7 +108,7 @@
     "poly_question": "Adelaide United FC vs. Newcastle United Jets FC: O/U 3.5",
     "exch_name": "Newcastle United vs Brentford",
     "score": 70.3,
-    "cluster_id": 2148157670112,
+    "cluster_id": 2313641345088,
     "avg_cluster_confidence": 68.43333333333332
   },
   {
@@ -76,39 +116,47 @@
     "poly_question": "Will Newcastle United Jets FC win on 2026-02-13?",
     "exch_name": "Newcastle United vs Brentford",
     "score": 64.69999999999999,
-    "cluster_id": 2148157670112,
+    "cluster_id": 2313641345088,
     "avg_cluster_confidence": 68.43333333333332
-  },
-  {
-    "poly_id": "1311958",
-    "poly_question": "Will Rayo Vallecano de Madrid vs. Club Atl\u00e9tico de Madrid end in a draw?",
-    "exch_name": "Rayo Vallecano v Atletico Madrid",
-    "score": 70.3,
-    "cluster_id": 2148129622048,
-    "avg_cluster_confidence": 67.02272727272727
-  },
-  {
-    "poly_id": "1309712",
-    "poly_question": "Port Vale FC vs. Bristol City FC: O/U 1.5",
-    "exch_name": "Hull City vs Bristol City FC",
-    "score": 76.6,
-    "cluster_id": 2148157559232,
-    "avg_cluster_confidence": 73.33333333333333
   },
   {
     "poly_id": "1300606",
     "poly_question": "Hull City AFC vs. Chelsea FC: O/U 2.5",
     "exch_name": "Hull City vs Bristol City FC",
     "score": 70.3,
-    "cluster_id": 2148157559232,
+    "cluster_id": 2313643352000,
     "avg_cluster_confidence": 73.33333333333333
+  },
+  {
+    "poly_id": "1309712",
+    "poly_question": "Port Vale FC vs. Bristol City FC: O/U 1.5",
+    "exch_name": "Hull City vs Bristol City FC",
+    "score": 76.6,
+    "cluster_id": 2313643352000,
+    "avg_cluster_confidence": 73.33333333333333
+  },
+  {
+    "poly_id": "1289947",
+    "poly_question": "Will Aston Villa FC vs. Brighton & Hove Albion FC end in a draw?",
+    "exch_name": "Aston Villa v Brighton",
+    "score": 81.5,
+    "cluster_id": 2313641959360,
+    "avg_cluster_confidence": 65.21578947368421
+  },
+  {
+    "poly_id": "1309698",
+    "poly_question": "Liverpool FC vs. Brighton & Hove Albion FC: O/U 2.5",
+    "exch_name": "Albion FC v Liverpool Montevideo",
+    "score": 67.5,
+    "cluster_id": 2313641959360,
+    "avg_cluster_confidence": 65.21578947368421
   },
   {
     "poly_id": "1290357",
     "poly_question": "Sunderland AFC vs. Liverpool FC: O/U 2.5",
     "exch_name": "Sunderland v Liverpool",
     "score": 81.5,
-    "cluster_id": 2148106202336,
+    "cluster_id": 2313641958912,
     "avg_cluster_confidence": 68.53333333333333
   },
   {
@@ -116,7 +164,7 @@
     "poly_question": "Racing Club de Lens vs. Stade Rennais FC 1901: O/U 3.5",
     "exch_name": "Lens vs Rennes",
     "score": 61.9,
-    "cluster_id": 2148129620928,
+    "cluster_id": 2313641956672,
     "avg_cluster_confidence": 61.89999999999999
   },
   {
@@ -124,15 +172,31 @@
     "poly_question": "Will Club Alianza Lima vs. CD Comerciantes Unidos end in a draw?",
     "exch_name": "Alianza Lima vs 2 de Mayo",
     "score": 67.5,
-    "cluster_id": 2148129621600,
+    "cluster_id": 2313641959136,
     "avg_cluster_confidence": 67.5
+  },
+  {
+    "poly_id": "1263217",
+    "poly_question": "VfL Wolfsburg vs. BV Borussia 09 Dortmund: Both Teams to Score",
+    "exch_name": "VfL Wolfsburg vs Borussia Dortmund",
+    "score": 85.0,
+    "cluster_id": 2313642098976,
+    "avg_cluster_confidence": 73.66756756756756
+  },
+  {
+    "poly_id": "1304200",
+    "poly_question": "Will BV Borussia 09 Dortmund win on 2026-02-13?",
+    "exch_name": "VfL Wolfsburg vs Borussia Dortmund",
+    "score": 61.9,
+    "cluster_id": 2313642098976,
+    "avg_cluster_confidence": 73.66756756756756
   },
   {
     "poly_id": "1309740",
     "poly_question": "Burton Albion FC vs. West Ham United FC: O/U 2.5",
     "exch_name": "Burnley vs West Ham United",
     "score": 72.4,
-    "cluster_id": 2148129620480,
+    "cluster_id": 2313643602464,
     "avg_cluster_confidence": 71.49000000000001
   },
   {
@@ -140,31 +204,63 @@
     "poly_question": "SSC Napoli vs. Como 1907: O/U 1.5",
     "exch_name": "Napoli v Como",
     "score": 79.39999999999999,
-    "cluster_id": 2148129621824,
+    "cluster_id": 2313643503040,
     "avg_cluster_confidence": 68.095
   },
   {
-    "poly_id": "1309698",
-    "poly_question": "Liverpool FC vs. Brighton & Hove Albion FC: O/U 2.5",
-    "exch_name": "Albion FC v Liverpool Montevideo",
-    "score": 67.5,
-    "cluster_id": 2148153739520,
-    "avg_cluster_confidence": 64.84736842105262
+    "poly_id": "1256221",
+    "poly_question": "1. FC Union Berlin vs. Eintracht Frankfurt: O/U 3.5",
+    "exch_name": "Eintracht Frankfurt v Mgladbach",
+    "score": 68.19999999999999,
+    "cluster_id": 2313641457728,
+    "avg_cluster_confidence": 61.9
+  },
+  {
+    "poly_id": "1309607",
+    "poly_question": "Will Eintracht Frankfurt vs. Borussia M\u00f6nchengladbach end in a draw?",
+    "exch_name": "Eintracht Frankfurt v Mgladbach",
+    "score": 68.19999999999999,
+    "cluster_id": 2313641457728,
+    "avg_cluster_confidence": 61.9
+  },
+  {
+    "poly_id": "1289960",
+    "poly_question": "Will Manchester City FC win on 2026-02-11?",
+    "exch_name": "Liverpool vs Manchester City",
+    "score": 64.0,
+    "cluster_id": 2313675708384,
+    "avg_cluster_confidence": 66.91351351351351
   },
   {
     "poly_id": "1236221",
     "poly_question": "Will Manchester City FC vs. Salford City FC end in a draw?",
     "exch_name": "Man City v Salford City",
     "score": 71.0,
-    "cluster_id": 2147524638336,
-    "avg_cluster_confidence": 69.67368421052632
+    "cluster_id": 2313675708384,
+    "avg_cluster_confidence": 66.91351351351351
+  },
+  {
+    "poly_id": "1317142",
+    "poly_question": "Will FC Metz vs. AJ Auxerre end in a draw?",
+    "exch_name": "Metz v Auxerre",
+    "score": 79.39999999999999,
+    "cluster_id": 2313643503936,
+    "avg_cluster_confidence": 71.73499999999999
+  },
+  {
+    "poly_id": "1290394",
+    "poly_question": "Nottingham Forest FC vs. Wolverhampton Wanderers FC: O/U 2.5",
+    "exch_name": "Wolverhampton Wanderers vs Chelsea",
+    "score": 75.9,
+    "cluster_id": 2313641811008,
+    "avg_cluster_confidence": 75.9
   },
   {
     "poly_id": "1208826",
     "poly_question": "Will Norwich City FC vs. West Bromwich Albion FC end in a draw?",
     "exch_name": "West Bromwich Albion vs Stoke City",
     "score": 78.0,
-    "cluster_id": 2148153739072,
+    "cluster_id": 2313643503712,
     "avg_cluster_confidence": 78.0
   },
   {
@@ -172,143 +268,135 @@
     "poly_question": "Will FC Nantes win on 2026-02-13?",
     "exch_name": "FC Nantes vs Lyon",
     "score": 63.3,
-    "cluster_id": 2148153740416,
-    "avg_cluster_confidence": 68.19999999999999
+    "cluster_id": 2313642099200,
+    "avg_cluster_confidence": 63.29999999999999
   },
   {
-    "poly_id": "1263123",
-    "poly_question": "FC Nantes vs. Olympique Lyonnais: O/U 2.5",
-    "exch_name": "FC Nantes vs Lyon",
-    "score": 73.1,
-    "cluster_id": 2148153740416,
-    "avg_cluster_confidence": 68.19999999999999
+    "poly_id": "1313461",
+    "poly_question": "Western Illinois Leathernecks vs. Tennessee State Tigers",
+    "exch_name": "Illinois State vs Drake",
+    "score": 74.5,
+    "cluster_id": 2313641345760,
+    "avg_cluster_confidence": 74.5
   },
   {
-    "poly_id": "1317716",
-    "poly_question": "Map Handicap: NRG (-1.5) vs G2 Esports (+1.5)",
+    "poly_id": "1330928",
+    "poly_question": "Valorant: BAAM Esports vs Team RA'AD (BO3) - VCL MENA: Resilience Kickoff Group Stage - NA",
     "exch_name": "Fnatic vs G2 Esports",
-    "score": 70.3,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
+    "score": 61.9,
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
+  },
+  {
+    "poly_id": "1319384",
+    "poly_question": "Valorant: CGN Esports vs Dortmund eSports (BO3) - VCL DACH: Evolution Playoffs",
+    "exch_name": "Dortmund v Mainz",
+    "score": 61.9,
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
   },
   {
     "poly_id": "1343050",
     "poly_question": "Counter-Strike: ex-KR\u00dc Esports vs Bad Luck (BO3) - CCT South America Series #8 Group Stage",
     "exch_name": "Fnatic vs G2 Esports",
     "score": 61.9,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
   },
   {
-    "poly_id": "1318391",
-    "poly_question": "LoL: GnG Amazigh vs 3BL Esports - Game 2 Winner",
+    "poly_id": "1339216",
+    "poly_question": "Counter-Strike: RED Canids vs Bounty Hunters Esports - Map 1 Winner",
     "exch_name": "Fnatic vs G2 Esports",
     "score": 61.9,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
   },
   {
-    "poly_id": "1317712",
-    "poly_question": "Valorant: NRG vs G2 Esports (BO3) - VCT Americas Kickoff Playoffs",
-    "exch_name": "Fnatic vs G2 Esports",
-    "score": 70.3,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
-  },
-  {
-    "poly_id": "1319384",
-    "poly_question": "Valorant: CGN Esports vs Dortmund eSports (BO3) - VCL DACH: Evolution Playoffs",
+    "poly_id": "1343919",
+    "poly_question": "Valorant: Global Esports vs Gen.G Esports (BO3) - VCT Pacific Kickoff Playoffs",
     "exch_name": "Fnatic vs G2 Esports",
     "score": 61.9,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
   },
   {
-    "poly_id": "1343939",
-    "poly_question": "Counter-Strike: BC.Game Esports vs Alliance (BO3) - RES Showdown Spring BLAST Premier Rising Event Playoffs",
+    "poly_id": "1343052",
+    "poly_question": "Counter-Strike: ex-KR\u00dc Esports vs Bad Luck - Map 2 Winner",
     "exch_name": "Fnatic vs G2 Esports",
     "score": 61.9,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
   },
   {
     "poly_id": "1330937",
     "poly_question": "Map Handicap: GNGA (-1.5) vs One More Esports (+1.5)",
     "exch_name": "Fnatic vs G2 Esports",
     "score": 61.9,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
   },
   {
-    "poly_id": "1318398",
-    "poly_question": "Game Handicap: DRG (-1.5) vs Baam Esports (+1.5)",
-    "exch_name": "Fnatic vs G2 Esports",
-    "score": 61.9,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
-  },
-  {
-    "poly_id": "1338765",
-    "poly_question": "Rainbow Six Siege: FaZe Clan vs G2 Esports (BO3) - Six Invitational Group C",
+    "poly_id": "1317716",
+    "poly_question": "Map Handicap: NRG (-1.5) vs G2 Esports (+1.5)",
     "exch_name": "Fnatic vs G2 Esports",
     "score": 70.3,
-    "cluster_id": 2148153316896,
-    "avg_cluster_confidence": 63.51538461538461
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
   },
   {
-    "poly_id": "1326007",
-    "poly_question": "LoL: Team Vitality vs Los Ratones (BO1) - LEC Versus Regular Season",
-    "exch_name": "Team Vitality vs Los Ratones",
-    "score": 85.0,
-    "cluster_id": 2148129620256,
-    "avg_cluster_confidence": 70.3
-  },
-  {
-    "poly_id": "1326009",
-    "poly_question": "LoL: SK Gaming vs Shifters (BO1) - LEC Versus Regular Season",
-    "exch_name": "SK Gaming vs Shifters",
-    "score": 85.0,
-    "cluster_id": 2148129620256,
-    "avg_cluster_confidence": 70.3
-  },
-  {
-    "poly_id": "1338203",
-    "poly_question": "Valorant: Fnatic vs Team Vitality (BO3) - VCT EMEA Kickoff Playoffs",
-    "exch_name": "Team Heretics vs Fnatic",
-    "score": 68.19999999999999,
-    "cluster_id": 2148129620256,
-    "avg_cluster_confidence": 70.3
-  },
-  {
-    "poly_id": "1344070",
-    "poly_question": "Grizzlies vs. Trail Blazers: O/U 233.5",
-    "exch_name": "Memphis Grizzlies @ Portland Trail Blazers",
-    "score": 69.6,
-    "cluster_id": 2148106479520,
-    "avg_cluster_confidence": 67.03333333333333
-  },
-  {
-    "poly_id": "1345452",
-    "poly_question": "Grizzlies vs. Trail Blazers: O/U 231.5",
-    "exch_name": "Memphis Grizzlies @ Portland Trail Blazers",
-    "score": 69.6,
-    "cluster_id": 2148106479520,
-    "avg_cluster_confidence": 67.03333333333333
-  },
-  {
-    "poly_id": "1266850",
-    "poly_question": "Spread: Grizzlies (-5.5)",
-    "exch_name": "Memphis Grizzlies @ Portland Trail Blazers",
+    "poly_id": "1318393",
+    "poly_question": "Game Handicap: GNG (-1.5) vs 3BL Esports (+1.5)",
+    "exch_name": "Fnatic vs G2 Esports",
     "score": 61.9,
-    "cluster_id": 2148106479520,
-    "avg_cluster_confidence": 67.03333333333333
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
+  },
+  {
+    "poly_id": "1343939",
+    "poly_question": "Counter-Strike: BC.Game Esports vs Alliance (BO3) - RES Showdown Spring BLAST Premier Rising Event Playoffs",
+    "exch_name": "Fnatic vs G2 Esports",
+    "score": 61.9,
+    "cluster_id": 2313643352224,
+    "avg_cluster_confidence": 62.48333333333333
+  },
+  {
+    "poly_id": "1275440",
+    "poly_question": "Atalanta BC vs. US Cremonese: Both Teams to Score",
+    "exch_name": "Atalanta v US Cremonese",
+    "score": 81.5,
+    "cluster_id": 2313643600000,
+    "avg_cluster_confidence": 67.5
+  },
+  {
+    "poly_id": "1317137",
+    "poly_question": "Will US Cremonese win on 2026-02-15?",
+    "exch_name": "US Cremonese v Genoa",
+    "score": 67.5,
+    "cluster_id": 2313643600000,
+    "avg_cluster_confidence": 67.5
+  },
+  {
+    "poly_id": "1275244",
+    "poly_question": "Will US Cremonese win on 2026-02-09?",
+    "exch_name": "US Cremonese v Genoa",
+    "score": 67.5,
+    "cluster_id": 2313643600000,
+    "avg_cluster_confidence": 67.5
+  },
+  {
+    "poly_id": "1345572",
+    "poly_question": "Valorant: Formulation Gaming vs Team Liquid Academy (BO3) - VCL NORTH//EAST Group B",
+    "exch_name": "Team Liquid vs Sentinels",
+    "score": 66.8,
+    "cluster_id": 2313643814784,
+    "avg_cluster_confidence": 66.8
   },
   {
     "poly_id": "1344197",
     "poly_question": "Valorant: GIANTX vs Team Liquid - Map 1 Winner",
     "exch_name": "Team Liquid vs Sentinels",
     "score": 66.8,
-    "cluster_id": 2148157684448,
+    "cluster_id": 2313643814784,
     "avg_cluster_confidence": 66.8
   },
   {
@@ -316,111 +404,175 @@
     "poly_question": "Valorant: GIANTX vs Team Liquid - Map 2 Winner",
     "exch_name": "Team Liquid vs Sentinels",
     "score": 66.8,
-    "cluster_id": 2148157684448,
+    "cluster_id": 2313643814784,
     "avg_cluster_confidence": 66.8
-  },
-  {
-    "poly_id": "1275427",
-    "poly_question": "AS Roma vs. Cagliari Calcio: O/U 4.5",
-    "exch_name": "Roma v Cagliari",
-    "score": 80.1,
-    "cluster_id": 2148129264736,
-    "avg_cluster_confidence": 71.0
   },
   {
     "poly_id": "1275426",
     "poly_question": "AS Roma vs. Cagliari Calcio: O/U 3.5",
     "exch_name": "Roma v Cagliari",
     "score": 80.1,
-    "cluster_id": 2148129264736,
+    "cluster_id": 2313641345312,
     "avg_cluster_confidence": 71.0
   },
   {
-    "poly_id": "1344966",
-    "poly_question": "Maia vs. Zakharova: Total Sets O/U 2.5",
-    "exch_name": "B Haddad Maia v Zakharova",
+    "poly_id": "1275250",
+    "poly_question": "Will AS Roma vs. Cagliari Calcio end in a draw?",
+    "exch_name": "Roma v Cagliari",
+    "score": 80.1,
+    "cluster_id": 2313641345312,
+    "avg_cluster_confidence": 71.0
+  },
+  {
+    "poly_id": "1275427",
+    "poly_question": "AS Roma vs. Cagliari Calcio: O/U 4.5",
+    "exch_name": "Roma v Cagliari",
+    "score": 80.1,
+    "cluster_id": 2313641345312,
+    "avg_cluster_confidence": 71.0
+  },
+  {
+    "poly_id": "1344070",
+    "poly_question": "Grizzlies vs. Trail Blazers: O/U 233.5",
+    "exch_name": "Memphis Grizzlies @ Portland Trail Blazers",
+    "score": 69.6,
+    "cluster_id": 2313641663328,
+    "avg_cluster_confidence": 67.03333333333333
+  },
+  {
+    "poly_id": "1344492",
+    "poly_question": "Grizzlies vs. Trail Blazers: O/U 232.5",
+    "exch_name": "Memphis Grizzlies @ Portland Trail Blazers",
+    "score": 69.6,
+    "cluster_id": 2313641663328,
+    "avg_cluster_confidence": 67.03333333333333
+  },
+  {
+    "poly_id": "1266850",
+    "poly_question": "Spread: Grizzlies (-5.5)",
+    "exch_name": "Memphis Grizzlies @ Portland Trail Blazers",
+    "score": 61.9,
+    "cluster_id": 2313641663328,
+    "avg_cluster_confidence": 67.03333333333333
+  },
+  {
+    "poly_id": "1343857",
+    "poly_question": "Pelicans vs. Timberwolves: O/U 236.5",
+    "exch_name": "New Orleans Pelicans @ Minnesota Timberwolves",
+    "score": 68.19999999999999,
+    "cluster_id": 2313641249248,
+    "avg_cluster_confidence": 67.26666666666667
+  },
+  {
+    "poly_id": "1343862",
+    "poly_question": "Pelicans vs. Timberwolves: O/U 235.5",
+    "exch_name": "New Orleans Pelicans @ Minnesota Timberwolves",
+    "score": 68.19999999999999,
+    "cluster_id": 2313641249248,
+    "avg_cluster_confidence": 67.26666666666667
+  },
+  {
+    "poly_id": "1344228",
+    "poly_question": "Pelicans vs. Timberwolves: 1H Moneyline",
+    "exch_name": "New Orleans Pelicans @ Minnesota Timberwolves",
     "score": 65.4,
-    "cluster_id": 2148106469440,
-    "avg_cluster_confidence": 69.83333333333333
+    "cluster_id": 2313641249248,
+    "avg_cluster_confidence": 67.26666666666667
   },
   {
-    "poly_id": "1344973",
-    "poly_question": "Maia vs. Zakharova: Match O/U 23.5",
-    "exch_name": "B Haddad Maia v Zakharova",
-    "score": 65.4,
-    "cluster_id": 2148106469440,
-    "avg_cluster_confidence": 69.83333333333333
-  },
-  {
-    "poly_id": "1344807",
-    "poly_question": "Qatar Total Open, Qualification: Beatriz Haddad Maia vs Anastasia Zakharova",
-    "exch_name": "B Haddad Maia v Zakharova",
-    "score": 78.69999999999999,
-    "cluster_id": 2148106469440,
-    "avg_cluster_confidence": 69.83333333333333
-  },
-  {
-    "poly_id": "1323637",
-    "poly_question": "LoL: Disguised vs LYON (BO3) - LCS Lock In Group Stage",
-    "exch_name": "disguised vs Lyon Gaming",
-    "score": 73.1,
-    "cluster_id": 2148106478624,
-    "avg_cluster_confidence": 73.1
-  },
-  {
-    "poly_id": "1326008",
-    "poly_question": "LoL: Karmine Corp Blue vs GIANTX (BO1) - LEC Versus Regular Season",
-    "exch_name": "Karmine Corp Blue vs Giantx",
+    "poly_id": "1310496",
+    "poly_question": "UFC Fight Night: Alex Morono vs. Daniil Donchenko (Welterweight, Prelims)",
+    "exch_name": "Alex Morono vs Daniil Donchenko",
     "score": 85.0,
-    "cluster_id": 2148157685344,
-    "avg_cluster_confidence": 79.39999999999999
+    "cluster_id": 2313643648928,
+    "avg_cluster_confidence": 73.8
+  },
+  {
+    "poly_id": "1310501",
+    "poly_question": "Will Daniil Donchenko win by KO or TKO?",
+    "exch_name": "Alex Morono vs Daniil Donchenko",
+    "score": 62.599999999999994,
+    "cluster_id": 2313643648928,
+    "avg_cluster_confidence": 73.8
+  },
+  {
+    "poly_id": "1338203",
+    "poly_question": "Valorant: Fnatic vs Team Vitality (BO3) - VCT EMEA Kickoff Playoffs",
+    "exch_name": "Team Heretics vs Fnatic",
+    "score": 68.19999999999999,
+    "cluster_id": 2313641662880,
+    "avg_cluster_confidence": 66.33333333333333
   },
   {
     "poly_id": "1345560",
     "poly_question": "Valorant: Dragon Ranger Gaming vs EDward Gaming (BO3) - VCT China Kickoff Playoffs",
     "exch_name": "Edward Gaming vs OMG",
     "score": 77.3,
-    "cluster_id": 2148106478400,
+    "cluster_id": 2313641249696,
     "avg_cluster_confidence": 77.3
   },
   {
-    "poly_id": "1275440",
-    "poly_question": "Atalanta BC vs. US Cremonese: Both Teams to Score",
-    "exch_name": "Atalanta v US Cremonese",
-    "score": 81.5,
-    "cluster_id": 2148129264064,
-    "avg_cluster_confidence": 71.7
+    "poly_id": "1257512",
+    "poly_question": "CA Central C\u00f3rdoba vs. CA Uni\u00f3n: O/U 2.5",
+    "exch_name": "Central Cordoba (SdE) v Union Santa Fe",
+    "score": 61.9,
+    "cluster_id": 2313641253504,
+    "avg_cluster_confidence": 61.9
   },
   {
-    "poly_id": "1346329",
-    "poly_question": "Knicks vs. Pistons: O/U 220.5",
-    "exch_name": "New York Knicks @ Detroit Pistons",
+    "poly_id": "1257511",
+    "poly_question": "CA Central C\u00f3rdoba vs. CA Uni\u00f3n: O/U 1.5",
+    "exch_name": "Central Cordoba (SdE) v Union Santa Fe",
+    "score": 61.9,
+    "cluster_id": 2313641253504,
+    "avg_cluster_confidence": 61.9
+  },
+  {
+    "poly_id": "1294934",
+    "poly_question": "Will Red Bull Bragantino win on 2026-02-25?",
+    "exch_name": "Corinthians v Red Bull Bragantino",
+    "score": 66.1,
+    "cluster_id": 2313641663104,
+    "avg_cluster_confidence": 65.05
+  },
+  {
+    "poly_id": "1342356",
+    "poly_question": "Will H\u0160K Zrinjski Mostar vs. Crystal Palace FC end in a draw?",
+    "exch_name": "Crystal Palace v Burnley",
+    "score": 66.8,
+    "cluster_id": 2313641311392,
+    "avg_cluster_confidence": 66.1
+  },
+  {
+    "poly_id": "1344966",
+    "poly_question": "Maia vs. Zakharova: Total Sets O/U 2.5",
+    "exch_name": "B Haddad Maia v Zakharova",
+    "score": 65.4,
+    "cluster_id": 2313678300640,
+    "avg_cluster_confidence": 65.4
+  },
+  {
+    "poly_id": "1344973",
+    "poly_question": "Maia vs. Zakharova: Match O/U 23.5",
+    "exch_name": "B Haddad Maia v Zakharova",
+    "score": 65.4,
+    "cluster_id": 2313678300640,
+    "avg_cluster_confidence": 65.4
+  },
+  {
+    "poly_id": "1262757",
+    "poly_question": "Will SG Dynamo Dresden win on 2026-02-07?",
+    "exch_name": "Schalke 04 v Dynamo Dresden",
     "score": 62.599999999999994,
-    "cluster_id": 2148102264800,
+    "cluster_id": 2313641250592,
     "avg_cluster_confidence": 62.599999999999994
-  },
-  {
-    "poly_id": "1344730",
-    "poly_question": "Knicks vs. Pistons: O/U 223.5",
-    "exch_name": "New York Knicks @ Detroit Pistons",
-    "score": 62.599999999999994,
-    "cluster_id": 2148102264800,
-    "avg_cluster_confidence": 62.599999999999994
-  },
-  {
-    "poly_id": "1313461",
-    "poly_question": "Western Illinois Leathernecks vs. Tennessee State Tigers",
-    "exch_name": "Illinois State vs Drake",
-    "score": 74.5,
-    "cluster_id": 2148153738848,
-    "avg_cluster_confidence": 74.5
   },
   {
     "poly_id": "1261634",
     "poly_question": "Al Kholood Saudi Club vs. Al Shabab Saudi Club: O/U 2.5",
     "exch_name": "Al-Kholood Club v Al-Shabab (KSA)",
     "score": 76.6,
-    "cluster_id": 2148102350976,
+    "cluster_id": 2313809598432,
     "avg_cluster_confidence": 76.6
   },
   {
@@ -428,7 +580,7 @@
     "poly_question": "Mantova 1911 vs. SSC Bari: Both Teams to Score",
     "exch_name": "Mantova v SSD Bari",
     "score": 71.0,
-    "cluster_id": 2148129172032,
+    "cluster_id": 2313644007360,
     "avg_cluster_confidence": 71.0
   },
   {
@@ -436,7 +588,7 @@
     "poly_question": "UD Las Palmas vs. Burgos CF: Both Teams to Score",
     "exch_name": "Las Palmas v Burgos",
     "score": 80.8,
-    "cluster_id": 2148157684224,
+    "cluster_id": 2313677296512,
     "avg_cluster_confidence": 80.8
   },
   {
@@ -444,7 +596,7 @@
     "poly_question": "Spread: Real Zaragoza (-2.5)",
     "exch_name": "Zaragoza v Eibar",
     "score": 61.9,
-    "cluster_id": 2148102300032,
+    "cluster_id": 2313677304128,
     "avg_cluster_confidence": 61.9
   },
   {
@@ -452,39 +604,87 @@
     "poly_question": "Will Gaziantep FK win on 2026-02-15?",
     "exch_name": "Gaziantep FK v Kasimpasa",
     "score": 61.9,
-    "cluster_id": 2148102350752,
+    "cluster_id": 2313644056064,
     "avg_cluster_confidence": 61.9
   },
   {
-    "poly_id": "1341274",
-    "poly_question": "Will Olympiak\u00f3s SFP vs. Bayer 04 Leverkusen end in a draw?",
-    "exch_name": "Leverkusen v St Pauli",
+    "poly_id": "1276314",
+    "poly_question": "FC Porto vs. Sporting CP: O/U 2.5",
+    "exch_name": "Porto v Sporting Lisbon",
+    "score": 68.19999999999999,
+    "cluster_id": 2313643999296,
+    "avg_cluster_confidence": 68.19999999999999
+  },
+  {
+    "poly_id": "1194003",
+    "poly_question": "Will Mirassol FC vs. Cruzeiro EC end in a draw?",
+    "exch_name": "Mirassol v Cruzeiro MG",
+    "score": 75.9,
+    "cluster_id": 2313644055840,
+    "avg_cluster_confidence": 75.9
+  },
+  {
+    "poly_id": "1309626",
+    "poly_question": "Will AC Milan win on 2026-02-13?",
+    "exch_name": "Pisa v AC Milan",
+    "score": 64.0,
+    "cluster_id": 2313644000192,
+    "avg_cluster_confidence": 64.0
+  },
+  {
+    "poly_id": "1256550",
+    "poly_question": "Will RC Celta de Vigo vs. CA Osasuna end in a draw?",
+    "exch_name": "Espanyol v Celta Vigo",
     "score": 60.5,
-    "cluster_id": 2148106283808,
+    "cluster_id": 2313641247456,
     "avg_cluster_confidence": 60.5
+  },
+  {
+    "poly_id": "1341703",
+    "poly_question": "Spread: RCD Mallorca (-1.5)",
+    "exch_name": "Mallorca v Betis",
+    "score": 61.9,
+    "cluster_id": 2313677302112,
+    "avg_cluster_confidence": 61.9
   },
   {
     "poly_id": "1267362",
     "poly_question": "Will CS Cienciano win on 2026-02-08?",
     "exch_name": "Cienciano v Melgar",
     "score": 61.9,
-    "cluster_id": 2148076877216,
+    "cluster_id": 2313643953504,
     "avg_cluster_confidence": 61.9
   },
   {
-    "poly_id": "1345800",
-    "poly_question": "Qatar Total Open, Qualification: Sonay Kartal vs Kimberly Birrell",
-    "exch_name": "Kartal v Birrell",
-    "score": 80.1,
-    "cluster_id": 2148129169568,
-    "avg_cluster_confidence": 80.1
+    "poly_id": "1345835",
+    "poly_question": "Qatar Total Open, Qualification: Magdalena Frech vs Vera Zvonareva",
+    "exch_name": "Frech v Zvonareva",
+    "score": 80.8,
+    "cluster_id": 2313641249920,
+    "avg_cluster_confidence": 80.8
   },
   {
-    "poly_id": "1343857",
-    "poly_question": "Pelicans vs. Timberwolves: O/U 236.5",
-    "exch_name": "New Orleans Pelicans @ Minnesota Timberwolves",
-    "score": 68.19999999999999,
-    "cluster_id": 2148102274432,
-    "avg_cluster_confidence": 68.19999999999999
+    "poly_id": "1344912",
+    "poly_question": "Heat vs. Celtics: O/U 231.5",
+    "exch_name": "Miami Heat @ Boston Celtics",
+    "score": 60.5,
+    "cluster_id": 2313641298400,
+    "avg_cluster_confidence": 60.5
+  },
+  {
+    "poly_id": "1344730",
+    "poly_question": "Knicks vs. Pistons: O/U 223.5",
+    "exch_name": "New York Knicks @ Detroit Pistons",
+    "score": 62.599999999999994,
+    "cluster_id": 2313686084160,
+    "avg_cluster_confidence": 62.599999999999994
+  },
+  {
+    "poly_id": "1345451",
+    "poly_question": "Pacers vs. Bucks: O/U 222.5",
+    "exch_name": "Indiana Pacers @ Milwaukee Bucks",
+    "score": 60.5,
+    "cluster_id": 2313641258880,
+    "avg_cluster_confidence": 60.5
   }
 ]

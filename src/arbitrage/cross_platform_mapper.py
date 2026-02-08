@@ -562,12 +562,31 @@ class CrossPlatformMapper:
                         if p_clean in bf_clean or bf_clean in p_clean or (len(p_tokens & bf_tokens) > 1):
                             found_match = True
                     else:
-                        # STRICT US SPORTS CHECK
-                        # If overlap is good but one has "state" and other doesn't, FAIL logic
-                        has_p_state = 'state' in p_tokens or 'st' in p_tokens
-                        has_bf_state = 'state' in bf_tokens or 'st' in bf_tokens
-                        if has_p_state != has_bf_state:
-                             # "Illinois" vs "Illinois State" -> mismatch
+                        # STRICT US SPORTS CHECK (Optimized)
+                        # Define dangerous suffixes/modifiers that denote different entities
+                        # "st" is dangerous because it can be "Saint" or "State". 
+                        # We only block if 'state' is explicitly present or if 'st' mismatch in US sports context?
+                        # Let's keep 'st' separate for now or include it carefully.
+                        dangerous_tokens = {'state', 'tech', 'university', 'univ', 'college', 'a&m', 'southern', 'northern', 'eastern', 'western'}
+                        
+                        found_mismatch = False
+                        for tok in dangerous_tokens:
+                            has_p = tok in p_tokens
+                            has_bf = tok in bf_tokens
+                            if has_p != has_bf:
+                                found_mismatch = True
+                                break
+                        
+                        # Special handling for 'st' (Saint vs State)
+                        if not found_mismatch:
+                            has_p_st = 'st' in p_tokens
+                            has_bf_st = 'st' in bf_tokens
+                            if has_p_st != has_bf_st:
+                                 # Only strict mismatch if no other stronger match?
+                                 # "Saint Louis" vs "Louis" -> Mismatch? Yes.
+                                 found_mismatch = True
+
+                        if found_mismatch:
                              found_match = False
                         else:
                              # Require at least one non-generic token overlap for soccer
